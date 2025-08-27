@@ -27,6 +27,9 @@ class ControlUnit(
         val funct3 = Input(UInt(3.W))
         val funct7Bit5 = Input(Bool())
         val branchEnable = Input(Bool())
+        
+        val inst_jal = Output(Bool())
+        val inst_jalr = Output(Bool())
     })
 
     {
@@ -41,6 +44,8 @@ class ControlUnit(
         io.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
         io.dataMemWriteEnable := false.B
         io.regWriteDataSel := ControlUnit.RD_MUX_UNKNOWN.U
+        io.inst_jal := false.B
+        io.inst_jalr := false.B
 
         when(io.opCode === ControlUnit.OP_R_TYPE.U(7.W)) {
             io.pcMuxSel := false.B
@@ -195,6 +200,7 @@ class ControlUnit(
             io.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
             io.dataMemWriteEnable := false.B
             io.regWriteDataSel := ControlUnit.RD_MUX_PC_N.U
+            io.inst_jalr := true.B
         }
         when(io.opCode === ControlUnit.OP_I_LOAD_TYPE.U(7.W)) {
             io.pcMuxSel := false.B
@@ -354,6 +360,7 @@ class ControlUnit(
             io.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
             io.dataMemWriteEnable := false.B
             io.regWriteDataSel := ControlUnit.RD_MUX_PC_N.U
+            io.inst_jal := true.B
         }
     }
 }

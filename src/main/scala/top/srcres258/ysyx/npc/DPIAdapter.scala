@@ -17,5 +17,20 @@ class DPIAdapter extends BlackBox with HasBlackBoxPath {
           * 自动从外部主存读取该地址处的数据并据此更新处理器核心的“读入程序数据”输入。
           */
         val address = Input(UInt(32.W))
+        /**
+          * 输入：访存单元访存类型。每当类型发生改变时，
+          * 自动在仿真环境中记录 mtrace （访存记录）。
+          */
+        val lsType = Input(UInt(LoadAndStoreUnit.LS_TYPE_LEN.W))
+        /**
+          * 输入：当前指令类型是否为 jal 。
+          * 检测到上升沿时自动进行 ftrace 的检测与记录。
+          */
+        val inst_jal = Input(Bool())
+        /**
+          * 输入：当前指令类型是否为 jalr 。
+          * 检测到上升沿时自动进行 ftrace 的检测与记录。
+          */
+        val inst_jalr = Input(Bool())
     })
 }

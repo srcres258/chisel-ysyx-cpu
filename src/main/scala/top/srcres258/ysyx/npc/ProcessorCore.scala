@@ -43,16 +43,9 @@ class ProcessorCore extends Module {
           * 输出：读入/写出程序数据，地址
           */
         val address = Output(UInt(32.W))
-
-        /**
-          * 输出：程序计数器
-          */
-        val pc = Output(UInt(32.W))
-        /**
-          * 输出：寄存器
-          */
-        val registers = Output(Vec(32, UInt(32.W)))
     })
+
+    val ioDPI = IO(new DPIBundle)
 
     val pc = RegInit(ProcessorCore.PC_INITIAL_VAL)
     val pcNext = Wire(UInt(32.W))
@@ -91,9 +84,17 @@ class ProcessorCore extends Module {
     val regData = Wire(UInt(32.W))
 
     /**
-      * 处理器是否应当停机（仅在仿真时使用）
+      * 处理器是否应当停机 (仅在仿真时使用)
       */
     val halt = Wire(Bool())             // for simulating purpose only at present
+    /**
+      * 当前指令类型是否为 jal (仅在仿真时使用)
+      */
+    val inst_jal = Wire(Bool())         // for simulating purpose only at present
+    /**
+      * 当前指令类型是否为 jalr (仅在仿真时使用)
+      */
+    val inst_jalr = Wire(Bool())        // for simulating purpose only at present
 
     pcNext := pc + 4.U(32.W)
     pcUpdate := Mux(pcMuxSel, aluOutput, pcNext)
@@ -192,15 +193,29 @@ class ProcessorCore extends Module {
     */
     halt := inst === "h00100073".U(32.W)
 
+    inst_jal := cu.io.inst_jal
+    inst_jalr := cu.io.inst_jalr
+
     val dpi = Module(new DPIAdapter)
     dpi.io.halt := halt
     dpi.io.address := io.address
+    dpi.io.lsType := lsType
+    dpi.io.inst_jal := inst_jal
+    dpi.io.inst_jalr := inst_jalr
 
-    io.pc := pc
-
-    for (i <- 0 until io.registers.length) {
-        io.registers(i) := regFile.io.registers(i)
+    ioDPI.pc := pc
+    for (i <- 0 until ioDPI.registers.length) {
+        ioDPI.registers(i) := regFile.io.registers(i)
     }
+    ioDPI.lsType := lsType
+    ioDPI.inst_jal := inst_jal
+    ioDPI.inst_jalr := inst_jalr
+    ioDPI.rs1 := inst(19, 15)
+    ioDPI.rs2 := inst(24, 20)
+    ioDPI.rd := inst(11, 7)
+    ioDPI.imm := imm
+    ioDPI.rs1Data := rs1
+    ioDPI.rs2Data := rs2
 }
 
 object ProcessorCore extends App {
