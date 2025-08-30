@@ -99,6 +99,7 @@ class ProcessorCore extends Module {
         val aluOutput = UInt(32.W)
         val compBranchEnable = Bool()
         val storeData = UInt(32.W) // 来自 ID 阶段的 rs2Data
+        val imm = UInt(32.W)
         val rd = UInt(5.W)
 
         // 控制信号组
@@ -121,6 +122,7 @@ class ProcessorCore extends Module {
             default.aluOutput := 0.U
             default.compBranchEnable := false.B
             default.storeData := 0.U
+            default.imm := 0.U
             default.rd := 0.U
             default.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
             default.memReadEnable := false.B
@@ -143,6 +145,7 @@ class ProcessorCore extends Module {
         val memReadData = UInt(32.W)
         val aluOutput = UInt(32.W)
         val compBranchEnable = Bool()
+        val imm = UInt(32.W)
         val rd = UInt(5.W)
 
         // 控制信号组
@@ -158,6 +161,7 @@ class ProcessorCore extends Module {
             default.memReadData := 0.U
             default.aluOutput := 0.U
             default.compBranchEnable := false.B
+            default.imm := 0.U
             default.rd := 0.U
             default.regWriteEnable := false.B
             default.regWriteDataSel := 0.U
@@ -296,7 +300,7 @@ class ProcessorCore extends Module {
             regData := Cat(0.U(31.W), ma_wb_r.compBranchEnable.asUInt)
         }
         when(ma_wb_r.regWriteDataSel === ControlUnit.RD_MUX_IMM.U(ControlUnit.RD_MUX_SEL_LEN.W)) {
-            regData := ma_wb_r.aluOutput
+            regData := ma_wb_r.imm
         }
         when(ma_wb_r.regWriteDataSel === ControlUnit.RD_MUX_PC_N.U(ControlUnit.RD_MUX_SEL_LEN.W)) {
             regData := ma_wb_r.pcNext
@@ -430,6 +434,7 @@ class ProcessorCore extends Module {
         ex_ma_r.aluOutput := aluOutput
         ex_ma_r.compBranchEnable := branchEnable
         ex_ma_r.storeData := id_ex_r.rs2Data
+        ex_ma_r.imm := id_ex_r.imm
         ex_ma_r.rd := id_ex_r.rd
         ex_ma_r.lsType := id_ex_r.lsType
         ex_ma_r.memReadEnable := id_ex_r.memReadEnable
@@ -445,6 +450,7 @@ class ProcessorCore extends Module {
         ma_wb_r.memReadData := dmemData
         ma_wb_r.aluOutput := ex_ma_r.aluOutput
         ma_wb_r.compBranchEnable := ex_ma_r.compBranchEnable
+        ma_wb_r.imm := ex_ma_r.imm
         ma_wb_r.rd := ex_ma_r.rd
         ma_wb_r.regWriteEnable := ex_ma_r.regWriteEnable
         ma_wb_r.regWriteDataSel := ex_ma_r.regWriteDataSel
