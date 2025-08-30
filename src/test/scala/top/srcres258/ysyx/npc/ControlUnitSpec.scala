@@ -10,7 +10,6 @@ class ControlUnitSpec extends AnyFunSpec with ChiselSim {
                 val clock = top.clock
 
                 // outputs
-                val pcMuxSel = top.io.pcMuxSel
                 val regWriteEnable = top.io.regWriteEnable
                 val immSel = top.io.immSel
                 val executePortASel = top.io.executePortASel
@@ -25,17 +24,14 @@ class ControlUnitSpec extends AnyFunSpec with ChiselSim {
                 val opCode = top.io.opCode
                 val funct3 = top.io.funct3
                 val funct7Bit5 = top.io.funct7Bit5
-                val branchEnable = top.io.branchEnable
 
-                opCode.poke(0b0010011)
+                opCode.poke(0b0010111)
                 funct3.poke(0b000)
                 funct7Bit5.poke(0)
-                branchEnable.poke(false)
                 clock.step(1)
-                pcMuxSel.expect(0)
                 regWriteEnable.expect(1)
-                immSel.expect(ControlUnit.IMM_I_TYPE)
-                executePortASel.expect(1)
+                immSel.expect(ControlUnit.IMM_U_TYPE)
+                executePortASel.expect(0)
                 executePortBSel.expect(0)
                 aluOpSel.expect(ArithmeticLogicUnit.OP_ADD)
                 compOpSel.expect(ComparatorUnit.OP_UNKNOWN)

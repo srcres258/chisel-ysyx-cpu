@@ -7,17 +7,9 @@ import chisel3._
   */
 class DPIBundle extends Bundle {
     /**
-      * 输出：程序计数器
-      */
-    val pc = Output(UInt(32.W))
-    /**
       * 输出：寄存器
       */
     val registers = Output(Vec(32, UInt(32.W)))
-    /**
-      * 输出：访存类型
-      */
-    val lsType = Output(UInt(LoadAndStoreUnit.LS_TYPE_LEN.W))
 
     /**
       * 输出：当前指令是否为 jal
@@ -53,4 +45,9 @@ class DPIBundle extends Bundle {
       * 输出：当前指令中的源寄存器 rs2 字段的数据内容（已进行符号扩展）
       */
     val rs2Data = Output(UInt(32.W))
+
+    /**
+      * 输出：当前执行阶段
+      */
+    val stage = Output(UInt(StageController.STAGE_LEN.W))
 }

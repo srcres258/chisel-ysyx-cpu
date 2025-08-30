@@ -13,7 +13,6 @@ class ControlUnit(
     val xLen: Int = 32
 ) extends Module {
     val io = IO(new Bundle {
-        val pcMuxSel = Output(Bool())
         val regWriteEnable = Output(Bool())
         val immSel = Output(UInt(ControlUnit.IMM_SEL_LEN.W))
         val executePortASel = Output(Bool())
@@ -22,11 +21,14 @@ class ControlUnit(
         val compOpSel = Output(UInt(ComparatorUnit.COMP_OP_SEL_LEN.W))
         val lsType = Output(UInt(LoadAndStoreUnit.LS_TYPE_LEN.W))
         val dataMemWriteEnable = Output(Bool())
+        val dataMemReadEnable = Output(Bool())
         val regWriteDataSel = Output(UInt(ControlUnit.RD_MUX_SEL_LEN.W))
+        val jumpEnable = Output(Bool())
+        val jumpType = Output(UInt(ControlUnit.JUMP_TYPE_LEN.W))
+        val branchEnable = Output(Bool())
         val opCode = Input(UInt(7.W))
         val funct3 = Input(UInt(3.W))
         val funct7Bit5 = Input(Bool())
-        val branchEnable = Input(Bool())
         
         val inst_jal = Output(Bool())
         val inst_jalr = Output(Bool())
@@ -34,7 +36,6 @@ class ControlUnit(
 
     {
         // default values
-        io.pcMuxSel := false.B
         io.regWriteEnable := false.B
         io.immSel := ControlUnit.IMM_UNKNOWN_TYPE.U
         io.executePortASel := false.B
@@ -43,12 +44,15 @@ class ControlUnit(
         io.compOpSel := ComparatorUnit.OP_UNKNOWN.U
         io.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
         io.dataMemWriteEnable := false.B
+        io.dataMemReadEnable := false.B
         io.regWriteDataSel := ControlUnit.RD_MUX_UNKNOWN.U
+        io.jumpEnable := false.B
+        io.jumpType := ControlUnit.JUMP_TYPE_JAL.U
+        io.branchEnable := false.B
         io.inst_jal := false.B
         io.inst_jalr := false.B
 
         when(io.opCode === ControlUnit.OP_R_TYPE.U(7.W)) {
-            io.pcMuxSel := false.B
             io.regWriteEnable := true.B
             io.immSel := ControlUnit.IMM_UNKNOWN_TYPE.U
             io.executePortASel := true.B
@@ -124,10 +128,8 @@ class ControlUnit(
             }
 
             io.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
-            io.dataMemWriteEnable := false.B
         }
         when(io.opCode === ControlUnit.OP_B_TYPE.U(7.W)) {
-            io.pcMuxSel := io.branchEnable
             io.regWriteEnable := false.B
             io.immSel := ControlUnit.IMM_B_TYPE.U
             io.executePortASel := false.B
@@ -159,11 +161,10 @@ class ControlUnit(
             }
 
             io.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
-            io.dataMemWriteEnable := false.B
             io.regWriteDataSel := ControlUnit.RD_MUX_UNKNOWN.U
+            io.branchEnable := true.B
         }
         when(io.opCode === ControlUnit.OP_S_TYPE.U(7.W)) {
-            io.pcMuxSel := false.B
             io.regWriteEnable := false.B
             io.immSel := ControlUnit.IMM_S_TYPE.U
             io.executePortASel := true.B
@@ -190,7 +191,6 @@ class ControlUnit(
             io.regWriteDataSel := ControlUnit.RD_MUX_UNKNOWN.U
         }
         when(io.opCode === ControlUnit.OP_I_JALR_TYPE.U(7.W)) {
-            io.pcMuxSel := true.B
             io.regWriteEnable := true.B
             io.immSel := ControlUnit.IMM_I_TYPE.U
             io.executePortASel := true.B
@@ -198,12 +198,12 @@ class ControlUnit(
             io.aluOpSel := ArithmeticLogicUnit.OP_ADD.U
             io.compOpSel := ComparatorUnit.OP_UNKNOWN.U
             io.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
-            io.dataMemWriteEnable := false.B
             io.regWriteDataSel := ControlUnit.RD_MUX_PC_N.U
             io.inst_jalr := true.B
+            io.jumpEnable := true.B
+            io.jumpType := ControlUnit.JUMP_TYPE_JALR.U
         }
         when(io.opCode === ControlUnit.OP_I_LOAD_TYPE.U(7.W)) {
-            io.pcMuxSel := false.B
             io.regWriteEnable := true.B
             io.immSel := ControlUnit.IMM_I_TYPE.U
             io.executePortASel := true.B
@@ -232,11 +232,10 @@ class ControlUnit(
                 }
             }
 
-            io.dataMemWriteEnable := false.B
+            io.dataMemReadEnable := true.B
             io.regWriteDataSel := ControlUnit.RD_MUX_DMEM.U
         }
         when(io.opCode === ControlUnit.OP_I_ALU_TYPE.U(7.W)) {
-            io.pcMuxSel := false.B
             io.regWriteEnable := true.B
             io.immSel := ControlUnit.IMM_I_TYPE.U
             io.executePortASel := true.B
@@ -298,11 +297,9 @@ class ControlUnit(
                 }
 
                 io.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
-                io.dataMemWriteEnable := false.B
             }
         }
         when(io.opCode === ControlUnit.OP_I_FENCE_TYPE.U(7.W)) {
-            io.pcMuxSel := false.B
             io.regWriteEnable := false.B
             io.immSel := ControlUnit.IMM_I_TYPE.U
             io.executePortASel := true.B
@@ -310,23 +307,18 @@ class ControlUnit(
             io.aluOpSel := ArithmeticLogicUnit.OP_UNKNOWN.U
             io.compOpSel := ComparatorUnit.OP_UNKNOWN.U
             io.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
-            io.dataMemWriteEnable := false.B
             io.regWriteDataSel := ControlUnit.RD_MUX_UNKNOWN.U
         }
         when(io.opCode === ControlUnit.OP_I_ECALL_TYPE.U(7.W)) {
-            io.pcMuxSel := false.B
-            io.regWriteEnable := false.B
             io.immSel := ControlUnit.IMM_I_TYPE.U
             io.executePortASel := true.B
             io.executePortBSel := false.B
             io.aluOpSel := ArithmeticLogicUnit.OP_UNKNOWN.U
             io.compOpSel := ComparatorUnit.OP_UNKNOWN.U
             io.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
-            io.dataMemWriteEnable := false.B
             io.regWriteDataSel := ControlUnit.RD_MUX_UNKNOWN.U
         }
         when(io.opCode === ControlUnit.OP_U_LUI_TYPE.U(7.W)) {
-            io.pcMuxSel := false.B
             io.regWriteEnable := true.B
             io.immSel := ControlUnit.IMM_U_TYPE.U
             io.executePortASel := false.B
@@ -334,11 +326,9 @@ class ControlUnit(
             io.aluOpSel := ArithmeticLogicUnit.OP_UNKNOWN.U
             io.compOpSel := ComparatorUnit.OP_UNKNOWN.U
             io.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
-            io.dataMemWriteEnable := false.B
             io.regWriteDataSel := ControlUnit.RD_MUX_IMM.U
         }
         when(io.opCode === ControlUnit.OP_U_AUIPC_TYPE.U(7.W)) {
-            io.pcMuxSel := false.B
             io.regWriteEnable := true.B
             io.immSel := ControlUnit.IMM_U_TYPE.U
             io.executePortASel := false.B
@@ -346,11 +336,9 @@ class ControlUnit(
             io.aluOpSel := ArithmeticLogicUnit.OP_ADD.U
             io.compOpSel := ComparatorUnit.OP_UNKNOWN.U
             io.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
-            io.dataMemWriteEnable := false.B
             io.regWriteDataSel := ControlUnit.RD_MUX_ALU.U
         }
         when(io.opCode === ControlUnit.OP_J_TYPE.U(7.W)) {
-            io.pcMuxSel := true.B
             io.regWriteEnable := true.B
             io.immSel := ControlUnit.IMM_J_TYPE.U
             io.executePortASel := false.B
@@ -358,9 +346,9 @@ class ControlUnit(
             io.aluOpSel := ArithmeticLogicUnit.OP_ADD.U
             io.compOpSel := ComparatorUnit.OP_UNKNOWN.U
             io.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
-            io.dataMemWriteEnable := false.B
             io.regWriteDataSel := ControlUnit.RD_MUX_PC_N.U
             io.inst_jal := true.B
+            io.jumpEnable := true.B
         }
     }
 }
@@ -383,6 +371,11 @@ object ControlUnit {
     val RD_MUX_IMM: Int = 3
     val RD_MUX_PC_N: Int = 4
     val RD_MUX_UNKNOWN: Int = 5
+
+    val JUMP_TYPE_LEN: Int = 1
+
+    val JUMP_TYPE_JAL: Int = 0
+    val JUMP_TYPE_JALR: Int = 1
 
     private val OP_R_TYPE       = 0b0110011
     private val OP_B_TYPE       = 0b1100011

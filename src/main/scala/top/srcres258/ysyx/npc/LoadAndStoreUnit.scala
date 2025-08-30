@@ -18,7 +18,7 @@ class LoadAndStoreUnit(
         val writeDataOut = Output(UInt(xLen.W))
         val writeDataIn = Input(UInt(xLen.W))
         val lsType = Input(UInt(LoadAndStoreUnit.LS_TYPE_LEN.W))
-        val writeDataStrobe = Output(UInt(4.W))
+        val dataStrobe = Output(UInt(4.W))
     })
 
     val lsTypeOH = UIntToOH(io.lsType)
@@ -35,16 +35,26 @@ class LoadAndStoreUnit(
     lsTypeCasesW(LoadAndStoreUnit.LS_S_H) = Cat(Fill(xLen / 2, 0.U(1.W)), io.writeDataIn(xLen / 2 - 1, 0))
     io.writeDataOut := Mux1H(lsTypeOH, lsTypeCasesW.toIndexedSeq)
 
-    val lsTypeCasesWStrobe = Array.fill[UInt](1 << LoadAndStoreUnit.LS_TYPE_LEN)(0.U(4.W))
-    lsTypeCasesWStrobe(LoadAndStoreUnit.LS_S_B) = 0b0001.U(4.W)
-    lsTypeCasesWStrobe(LoadAndStoreUnit.LS_S_H) = 0b0011.U(4.W)
-    lsTypeCasesWStrobe(LoadAndStoreUnit.LS_S_W) = 0b1111.U(4.W)
-    io.writeDataStrobe := Mux1H(lsTypeOH, lsTypeCasesWStrobe.toIndexedSeq)
+    val lsTypeCasesStrobe = Array.fill[UInt](1 << LoadAndStoreUnit.LS_TYPE_LEN)(0.U(4.W))
+    lsTypeCasesStrobe(LoadAndStoreUnit.LS_L_B)  = 0b0001.U(4.W)
+    lsTypeCasesStrobe(LoadAndStoreUnit.LS_L_BU) = 0b0001.U(4.W)
+    lsTypeCasesStrobe(LoadAndStoreUnit.LS_L_H)  = 0b0011.U(4.W)
+    lsTypeCasesStrobe(LoadAndStoreUnit.LS_L_HU) = 0b0011.U(4.W)
+    lsTypeCasesStrobe(LoadAndStoreUnit.LS_L_W)  = 0b1111.U(4.W)
+    lsTypeCasesStrobe(LoadAndStoreUnit.LS_S_B)  = 0b0001.U(4.W)
+    lsTypeCasesStrobe(LoadAndStoreUnit.LS_S_H)  = 0b0011.U(4.W)
+    lsTypeCasesStrobe(LoadAndStoreUnit.LS_S_W)  = 0b1111.U(4.W)
+    io.dataStrobe := Mux1H(lsTypeOH, lsTypeCasesStrobe.toIndexedSeq)
 }
 
 object LoadAndStoreUnit {
     val LS_TYPE_LEN: Int = 4
 
+    /* 
+    W: 一个字 (4个字节)
+    H: 半个字 (2个字节)
+    B: 一个字节
+     */
     val LS_L_W: Int = 0
     val LS_L_H: Int = 1
     val LS_L_HU: Int = 2
