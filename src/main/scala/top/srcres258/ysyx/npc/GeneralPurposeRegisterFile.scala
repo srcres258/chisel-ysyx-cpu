@@ -4,15 +4,15 @@ import chisel3._
 import chisel3.util._
 
 /**
-  * 寄存器模块，用于给处理器定义寄存器
+  * 处理器的通用寄存器 (GPR) 模块
   */
-class RegisterFile(
+class GeneralPurposeRegisterFile(
     /**
       * xLen: 操作数位数，在 RV32I 指令集中为 32
       */
     val xLen: Int = 32,
     /**
-      * regAddrWidth: 寄存器编号位数，在 RV32I 指令集中为 5
+      * regAddrWidth: 寄存器 (GPR) 编号位数，在 RV32I 指令集中为 5
       */
     val regAddrWidth: Int = 5
 ) extends Module {
