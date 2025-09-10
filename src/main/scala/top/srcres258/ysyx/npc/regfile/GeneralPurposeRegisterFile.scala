@@ -20,10 +20,10 @@ class GeneralPurposeRegisterFile(
         val readPort = new GeneralPurposeRegisterFile.ReadPort(xLen, regAddrWidth)
         val writePort = new GeneralPurposeRegisterFile.WritePort(xLen, regAddrWidth)
 
-        val registers = Output(Vec(xLen, UInt(xLen.W)))
+        val registers = Output(Vec(1 << regAddrWidth, UInt(xLen.W)))
     })
 
-    val registers = RegInit(VecInit(Seq.fill(xLen)(0.U(xLen.W))))
+    val registers = RegInit(VecInit(Seq.fill(1 << regAddrWidth)(0.U(xLen.W))))
 
     io.readPort.readData1 := Mux(io.readPort.readAddress1.orR, registers(io.readPort.readAddress1), 0.U)
     io.readPort.readData2 := Mux(io.readPort.readAddress2.orR, registers(io.readPort.readAddress2), 0.U)
@@ -41,7 +41,7 @@ class GeneralPurposeRegisterFile(
 
 object GeneralPurposeRegisterFile {
     /**
-      * 通用寄存器文件的读取端口
+      * 寄存器文件的读取端口
       */
     class ReadPort(
         /**
@@ -61,7 +61,7 @@ object GeneralPurposeRegisterFile {
     }
 
     /**
-      * 通用寄存器文件的写入端口
+      * 寄存器文件的写入端口
       */
     class WritePort(
         /**

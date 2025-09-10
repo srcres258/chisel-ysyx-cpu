@@ -21,13 +21,20 @@ class PCTargetController(
         val imm = Input(UInt(xLen.W))
         val pcNext = Input(UInt(xLen.W))
         val rs1Data = Input(UInt(xLen.W))
+        val epcRecoverEnable = Input(Bool())
+        val epcData = Input(UInt(xLen.W))
+        val ecallEnable = Input(Bool())
+        val tvecData = Input(UInt(xLen.W))
 
         val pcTarget = Output(UInt(xLen.W))
     })
 
     io.pcTarget := io.pcNext
-
-    when(io.cuJumpEnable) {
+    when(io.ecallEnable) {
+        io.pcTarget := io.tvecData
+    }.elsewhen(io.epcRecoverEnable) {
+        io.pcTarget := io.epcData
+    }.elsewhen(io.cuJumpEnable) {
         when(io.cuJumpType === ControlUnit.JUMP_TYPE_JAL.U) {
             io.pcTarget := io.pc + io.imm
         }.elsewhen(io.cuJumpType === ControlUnit.JUMP_TYPE_JALR.U) {

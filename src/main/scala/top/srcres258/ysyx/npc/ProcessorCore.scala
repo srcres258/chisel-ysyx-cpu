@@ -10,6 +10,7 @@ import top.srcres258.ysyx.npc.stage._
 import top.srcres258.ysyx.npc.dpi.DPIAdapter
 import top.srcres258.ysyx.npc.dpi.DPIBundle
 import top.srcres258.ysyx.npc.regfile.GeneralPurposeRegisterFile
+import top.srcres258.ysyx.npc.regfile.ControlAndStatusRegisterFile
 
 /**
   * RV32I 单周期处理器核心
@@ -78,6 +79,16 @@ class ProcessorCore extends Module {
     gprFile.io.readPort.readAddress1 := 0.U
     gprFile.io.readPort.readAddress2 := 0.U
 
+    val csrFile = Module(new ControlAndStatusRegisterFile)
+    for (writePort <- List(csrFile.io.writePort1, csrFile.io.writePort2)) {
+        writePort.writeEnable := false.B
+        writePort.writeData := 0.U
+        writePort.writeAddress := 0.U
+    }
+    for (readPort <- List(csrFile.io.readPort1, csrFile.io.readPort2, csrFile.io.readPort3)) {
+        readPort.readAddress := 0.U
+    }
+
     val dpi = Module(new DPIAdapter)
     /* 
     RV32I 中，ebreak 指令的机器码是 0x00100073
@@ -98,9 +109,14 @@ class ProcessorCore extends Module {
     dpi.io.stage := stage
 
     val ioDPI = IO(new DPIBundle)
-    for (i <- 0 until ioDPI.registers.length) {
-        ioDPI.registers(i) := gprFile.io.registers(i)
+    for (i <- 0 until ioDPI.gprs.length) {
+        ioDPI.gprs(i) := gprFile.io.registers(i)
     }
+    ioDPI.csr_mstatus := csrFile.io.registers(ControlAndStatusRegisterFile.CSR_MSTATUS)
+    ioDPI.csr_mtvec := csrFile.io.registers(ControlAndStatusRegisterFile.CSR_MTVEC)
+    ioDPI.csr_mepc := csrFile.io.registers(ControlAndStatusRegisterFile.CSR_MEPC)
+    ioDPI.csr_mcause := csrFile.io.registers(ControlAndStatusRegisterFile.CSR_MCAUSE)
+    ioDPI.csr_mtval := csrFile.io.registers(ControlAndStatusRegisterFile.CSR_MTVAL)
     ioDPI.inst_jal := 0.U
     ioDPI.inst_jalr := 0.U
     ioDPI.rs1 := 0.U
@@ -118,6 +134,9 @@ class ProcessorCore extends Module {
     val idu = Module(new IDUnit)
     idu.io.gprReadPort.readData1 := 0.U
     idu.io.gprReadPort.readData2 := 0.U
+    for (csrReadPort <- List(idu.io.csrReadPort1, idu.io.csrReadPort2, idu.io.csrReadPort3)) {
+        csrReadPort.readData := 0.U
+    }
     idu.io.prevStage <> IF_ID_Bundle()
 
     val exu = Module(new EXUnit)
@@ -129,6 +148,7 @@ class ProcessorCore extends Module {
     mau.io.prevStage <> EX_MA_Bundle()
 
     val wbu = Module(new WBUnit())
+    wbu.io.pc := 0.U
     wbu.io.prevStage <> MA_WB_Bundle()
 
     val upcu = Module(new UPCUnit())
@@ -148,6 +168,9 @@ class ProcessorCore extends Module {
     }.elsewhen(stage === StageController.STAGE_ID.U(StageController.STAGE_LEN.W)) {
         // ID 阶段
         idu.io.gprReadPort <> gprFile.io.readPort
+        idu.io.csrReadPort1 <> csrFile.io.readPort1
+        idu.io.csrReadPort2 <> csrFile.io.readPort2
+        idu.io.csrReadPort3 <> csrFile.io.readPort3
         idu.io.prevStage <> if_id_r
 
         id_ex_r <> idu.io.nextStage
@@ -181,9 +204,12 @@ class ProcessorCore extends Module {
         ioDPI.inst_jalr := mau.ioDPI.inst_jalr
     }.elsewhen(stage === StageController.STAGE_WB.U(StageController.STAGE_LEN.W)) {
         // WB 阶段
+        wbu.io.pc := pc_r
         wbu.io.gprWritePort <> gprFile.io.writePort
         wbu.io.prevStage <> ma_wb_r
 
+        csrFile.io.writePort1 <> wbu.io.csrWritePort1
+        csrFile.io.writePort2 <> wbu.io.csrWritePort2
         wb_upc_r <> wbu.io.nextStage
     }.elsewhen(stage === StageController.STAGE_UPC.U(StageController.STAGE_LEN.W)) {
         // UPC 阶段

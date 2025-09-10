@@ -55,10 +55,18 @@ class MAUnit(
     io.nextStage.memReadData := dmemData
     io.nextStage.aluOutput := io.prevStage.aluOutput
     io.nextStage.compBranchEnable := io.prevStage.compBranchEnable
+    io.nextStage.rs1Data := io.prevStage.rs1Data
     io.nextStage.imm := io.prevStage.imm
     io.nextStage.rd := io.prevStage.rd
     io.nextStage.rs1 := io.prevStage.rs1
     io.nextStage.rs2 := io.prevStage.rs2
+    io.nextStage.csr := io.prevStage.csr
+    io.nextStage.csrData := io.prevStage.csrData
+    io.nextStage.zimm := io.prevStage.zimm
+    io.nextStage.ecallCause := io.prevStage.ecallCause
     io.nextStage.regWriteEnable := io.prevStage.regWriteEnable
+    io.nextStage.csrRegWriteEnable := io.prevStage.csrRegWriteEnable
     io.nextStage.regWriteDataSel := io.prevStage.regWriteDataSel
+    io.nextStage.csrRegWriteDataSel := io.prevStage.csrRegWriteDataSel
+    io.nextStage.ecallEnable := io.prevStage.ecallEnable
 }

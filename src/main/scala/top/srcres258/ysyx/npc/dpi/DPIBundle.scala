@@ -9,9 +9,29 @@ import top.srcres258.ysyx.npc.StageController
   */
 class DPIBundle extends Bundle {
     /**
-      * 输出：寄存器
+      * 输出：通用寄存器
       */
-    val registers = Output(Vec(32, UInt(32.W)))
+    val gprs = Output(Vec(1 << 5, UInt(32.W)))
+    /**
+      * 输出：控制与状态寄存器 mstatus
+      */
+    val csr_mstatus = Output(UInt(32.W))
+    /**
+      * 输出：控制与状态寄存器 mtvec
+      */
+    val csr_mtvec = Output(UInt(32.W))
+    /**
+      * 输出：控制与状态寄存器 mepc
+      */
+    val csr_mepc = Output(UInt(32.W))
+    /**
+      * 输出：控制与状态寄存器 mcause
+      */
+    val csr_mcause = Output(UInt(32.W))
+    /**
+      * 输出：控制与状态寄存器 mtval
+      */
+    val csr_mtval = Output(UInt(32.W))
 
     /**
       * 输出：当前指令是否为 jal
@@ -57,9 +77,14 @@ class DPIBundle extends Bundle {
 object DPIBundle {
     def defaultIO(): DPIBundle = {
         val default = IO(new DPIBundle)
-        for (i <- 0 until default.registers.length) {
-            default.registers(i) := 0.U
+        for (i <- 0 until default.gprs.length) {
+            default.gprs(i) := 0.U
         }
+        default.csr_mstatus := 0.U
+        default.csr_mtvec := 0.U
+        default.csr_mepc := 0.U
+        default.csr_mcause := 0.U
+        default.csr_mtval := 0.U
         default.inst_jal := false.B
         default.inst_jalr := false.B
         default.rs1 := 0.U

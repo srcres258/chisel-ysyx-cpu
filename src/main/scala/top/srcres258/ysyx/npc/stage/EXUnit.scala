@@ -59,6 +59,10 @@ class EXUnit(
     pcTargetCtrl.io.imm := io.prevStage.imm
     pcTargetCtrl.io.pcNext := io.prevStage.pcNext
     pcTargetCtrl.io.rs1Data := io.prevStage.rs1Data
+    pcTargetCtrl.io.epcRecoverEnable := io.prevStage.epcRecoverEnable
+    pcTargetCtrl.io.epcData := io.prevStage.epcData
+    pcTargetCtrl.io.ecallEnable := io.prevStage.ecallEnable
+    pcTargetCtrl.io.tvecData := io.prevStage.tvecData
 
     ioDPI.rs1Data := io.prevStage.rs1Data
     ioDPI.rs2Data := io.prevStage.rs2Data
@@ -67,16 +71,24 @@ class EXUnit(
     io.nextStage.pcTarget := pcTargetCtrl.io.pcTarget
     io.nextStage.aluOutput := aluOutput
     io.nextStage.compBranchEnable := branchEnable
+    io.nextStage.rs1Data := io.prevStage.rs1Data
     io.nextStage.storeData := io.prevStage.rs2Data
     io.nextStage.imm := io.prevStage.imm
     io.nextStage.rd := io.prevStage.rd
     io.nextStage.rs1 := io.prevStage.rs1
     io.nextStage.rs2 := io.prevStage.rs2
+    io.nextStage.csr := io.prevStage.csr
+    io.nextStage.csrData := io.prevStage.csrData
+    io.nextStage.zimm := io.prevStage.zimm
+    io.nextStage.ecallCause := io.prevStage.ecallCause
     io.nextStage.lsType := io.prevStage.lsType
     io.nextStage.memReadEnable := io.prevStage.memReadEnable
     io.nextStage.memWriteEnable := io.prevStage.memWriteEnable
     io.nextStage.regWriteEnable := io.prevStage.regWriteEnable
+    io.nextStage.csrRegWriteEnable := io.prevStage.csrRegWriteEnable
     io.nextStage.regWriteDataSel := io.prevStage.regWriteDataSel
+    io.nextStage.csrRegWriteDataSel := io.prevStage.csrRegWriteDataSel
+    io.nextStage.ecallEnable := io.prevStage.ecallEnable
     io.nextStage.inst_jal := io.prevStage.inst_jal
     io.nextStage.inst_jalr := io.prevStage.inst_jalr
 }
