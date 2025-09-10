@@ -6,194 +6,15 @@ import _root_.circt.stage.ChiselStage
 import chisel3.stage.ChiselGeneratorAnnotation
 import firrtl.AnnotationSeq
 
+import top.srcres258.ysyx.npc.stage._
+import top.srcres258.ysyx.npc.dpi.DPIAdapter
+import top.srcres258.ysyx.npc.dpi.DPIBundle
+import top.srcres258.ysyx.npc.regfile.GeneralPurposeRegisterFile
+
 /**
   * RV32I 单周期处理器核心
   */
 class ProcessorCore extends Module {
-    /**
-      * 从 IF 阶段到 ID 阶段所需流转的数据。
-      */
-    class IF_ID_Bundle extends Bundle {
-        val pcNext = UInt(32.W)
-        val inst = UInt(32.W)
-    }
-    object IF_ID_Bundle {
-        def apply(): IF_ID_Bundle = {
-            val default = Wire(new IF_ID_Bundle)
-
-            default.pcNext := 0.U
-            default.inst := 0.U
-
-            default
-        }
-    }
-
-    /**
-      * 从 ID 阶段到 EX 阶段所需流转的数据。
-      */
-    class ID_EX_Bundle extends Bundle {
-        val pcNext = UInt(32.W)
-        val rs1Data = UInt(32.W)
-        val rs2Data = UInt(32.W)
-        val imm = UInt(32.W)
-        val rd = UInt(5.W)
-        val rs1 = UInt(5.W)
-        val rs2 = UInt(5.W)
-
-        // 控制信号组
-        val regWriteEnable = Bool()
-        val aluPortASel = Bool()
-        val aluPortBSel = Bool()
-        val aluOpSel = UInt(ArithmeticLogicUnit.ALU_SEL_LEN.W)
-        val compOpSel = UInt(ComparatorUnit.COMP_OP_SEL_LEN.W)
-        val lsType = UInt(LoadAndStoreUnit.LS_TYPE_LEN.W)
-        val memWriteEnable = Bool()
-        val memReadEnable = Bool()
-        val regWriteDataSel = UInt(ControlUnit.RD_MUX_SEL_LEN.W)
-        val cuJumpEnable = Bool()
-        val cuJumpType = UInt(ControlUnit.JUMP_TYPE_LEN.W)
-        val cuBranchEnable = Bool()
-
-        // 调试信号 (仅供仿真使用)
-        val inst_jal = Bool()
-        val inst_jalr = Bool()
-    }
-    object ID_EX_Bundle {
-        def apply(): ID_EX_Bundle = {
-            val default = Wire(new ID_EX_Bundle)
-
-            default.pcNext := 0.U
-            default.rs1Data := 0.U
-            default.rs2Data := 0.U
-            default.imm := 0.U
-            default.rd := 0.U
-            default.rs1 := 0.U
-            default.rs2 := 0.U
-            default.regWriteEnable := false.B
-            default.aluPortASel := false.B
-            default.aluPortBSel := false.B
-            default.aluOpSel := 0.U
-            default.compOpSel := 0.U
-            default.lsType := 0.U
-            default.memWriteEnable := false.B
-            default.memReadEnable := false.B
-            default.regWriteDataSel := 0.U
-            default.cuJumpEnable := false.B
-            default.cuJumpType := ControlUnit.JUMP_TYPE_JAL.U
-            default.cuBranchEnable := false.B
-            default.inst_jal := false.B
-            default.inst_jalr := false.B
-
-            default
-        }
-    }
-
-    /**
-      * 从 EX 阶段到 MA 阶段所需流转的数据。
-      */
-    class EX_MA_Bundle extends Bundle {
-        val pcNext = UInt(32.W)
-        val pcTarget = UInt(32.W)
-        // 注：由于分支目标地址本身也经 ALU 计算，所以当分支启用时，
-        // aluOutput 中存的就是分支目标地址。
-        val aluOutput = UInt(32.W)
-        val compBranchEnable = Bool()
-        val storeData = UInt(32.W) // 来自 ID 阶段的 rs2Data
-        val imm = UInt(32.W)
-        val rd = UInt(5.W)
-        val rs1 = UInt(5.W)
-        val rs2 = UInt(5.W)
-
-        // 控制信号组
-        val lsType = UInt(LoadAndStoreUnit.LS_TYPE_LEN.W)
-        val memReadEnable = Bool()
-        val memWriteEnable = Bool()
-        val regWriteEnable = Bool()
-        val regWriteDataSel = UInt(ControlUnit.RD_MUX_SEL_LEN.W)
-
-        // 调试信号 (仅供仿真使用)
-        val inst_jal = Bool()
-        val inst_jalr = Bool()
-    }
-    object EX_MA_Bundle {
-        def apply(): EX_MA_Bundle = {
-            val default = Wire(new EX_MA_Bundle)
-
-            default.pcNext := 0.U
-            default.pcTarget := 0.U
-            default.aluOutput := 0.U
-            default.compBranchEnable := false.B
-            default.storeData := 0.U
-            default.imm := 0.U
-            default.rd := 0.U
-            default.rs1 := 0.U
-            default.rs2 := 0.U
-            default.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
-            default.memReadEnable := false.B
-            default.memWriteEnable := false.B
-            default.regWriteEnable := false.B
-            default.regWriteDataSel := 0.U
-            default.inst_jal := false.B
-            default.inst_jalr := false.B
-
-            default
-        }
-    }
-
-    /**
-      * 从 MA 阶段到 WB 阶段所需流转的数据。
-      */
-    class MA_WB_Bundle extends Bundle {
-        val pcNext = UInt(32.W)
-        val pcTarget = UInt(32.W)
-        val memReadData = UInt(32.W)
-        val aluOutput = UInt(32.W)
-        val compBranchEnable = Bool()
-        val imm = UInt(32.W)
-        val rd = UInt(5.W)
-        val rs1 = UInt(5.W)
-        val rs2 = UInt(5.W)
-
-        // 控制信号组
-        val regWriteEnable = Bool()
-        val regWriteDataSel = UInt(ControlUnit.RD_MUX_SEL_LEN.W)
-    }
-    object MA_WB_Bundle {
-        def apply(): MA_WB_Bundle = {
-            val default = Wire(new MA_WB_Bundle)
-
-            default.pcNext := 0.U
-            default.pcTarget := ProcessorCore.PC_INITIAL_VAL
-            default.memReadData := 0.U
-            default.aluOutput := 0.U
-            default.compBranchEnable := false.B
-            default.imm := 0.U
-            default.rd := 0.U
-            default.rs1 := 0.U
-            default.rs2 := 0.U
-            default.regWriteEnable := false.B
-            default.regWriteDataSel := 0.U
-
-            default
-        }
-    }
-
-    /**
-      * 从 WB 阶段到 UPC 阶段所需流转的数据。
-      */
-    class WB_UPC_Bundle extends Bundle {
-        val pcTarget = UInt(32.W)
-    }
-    object WB_UPC_Bundle {
-        def apply(): WB_UPC_Bundle = {
-            val default = Wire(new WB_UPC_Bundle)
-
-            default.pcTarget := 0.U
-
-            default
-        }
-    }
-
     /**
       * 目前的 IO 方式采用哈佛架构（指令的存取与程序数据的存取分离）
       * 但是实际仿真时也可适用于冯诺依曼架构（将指令与程序数据存在一块即可）
@@ -227,7 +48,7 @@ class ProcessorCore extends Module {
         /**
           * 输出：读入/写出程序数据，字掩码
           */
-        val dataStrobe = Output(UInt(4.W))
+        val dataStrobe = Output(UInt(LoadAndStoreUnit.DATA_STROBE_LEN.W))
         /**
           * 输出：读入/写出程序数据，地址
           */
@@ -251,51 +72,11 @@ class ProcessorCore extends Module {
     寄存器堆: ID 阶段读取数据, WB 阶段写入数据, 二者理论上不会发生读写冲突.
      */
     val gprFile = Module(new GeneralPurposeRegisterFile)
-    gprFile.io.writeEnable := false.B
-    gprFile.io.writeData := 0.U
-    gprFile.io.writeAddress := 0.U
-    gprFile.io.readAddress1 := 0.U
-    gprFile.io.readAddress2 := 0.U
-
-    val ise = Module(new ImmediateSignExtend)
-    ise.io.inst := 0.U
-    ise.io.immSel := 0.U
-
-    val cu = Module(new ControlUnit)
-    cu.io.opCode := 0.U
-    cu.io.funct3 := 0.U
-    cu.io.funct7Bit5 := 0.U
-    
-    val alu = Module(new ArithmeticLogicUnit)
-    alu.io.aluPortA := 0.U
-    alu.io.aluPortB := 0.U
-    alu.io.aluSel := 0.U
-
-    val compU = Module(new ComparatorUnit)
-    compU.io.compPortA := 0.U
-    compU.io.compPortB := 0.U
-    compU.io.compOpSel := 0.U
-
-    val lsu = Module(new LoadAndStoreUnit)
-    lsu.io.readDataIn := 0.U
-    io.writeData := 0.U
-    lsu.io.writeDataIn := 0.U
-    lsu.io.lsType := 0.U
-    io.dataStrobe := 0.U
-
-    io.address := 0.U
-    io.writeEnable := false.B
-    io.readEnable := false.B
-
-    val pcTargetCtrl = Module(new PCTargetController)
-    pcTargetCtrl.io.cuJumpEnable := 0.U
-    pcTargetCtrl.io.cuJumpType := 0.U
-    pcTargetCtrl.io.compBranchEnable := false.B
-    pcTargetCtrl.io.cuBranchEnable := false.B
-    pcTargetCtrl.io.pc := 0.U
-    pcTargetCtrl.io.imm := 0.U
-    pcTargetCtrl.io.pcNext := 0.U
-    pcTargetCtrl.io.rs1Data := 0.U
+    gprFile.io.writePort.writeEnable := false.B
+    gprFile.io.writePort.writeData := 0.U
+    gprFile.io.writePort.writeAddress := 0.U
+    gprFile.io.readPort.readAddress1 := 0.U
+    gprFile.io.readPort.readAddress2 := 0.U
 
     val dpi = Module(new DPIAdapter)
     /* 
@@ -330,205 +111,85 @@ class ProcessorCore extends Module {
     ioDPI.rs2Data := 0.U
     ioDPI.stage := stage
 
+    val ifu = Module(new IFUnit)
+    ifu.io.pc := 0.U
+    ifu.io.instData := 0.U
+
+    val idu = Module(new IDUnit)
+    idu.io.gprReadPort.readData1 := 0.U
+    idu.io.gprReadPort.readData2 := 0.U
+    idu.io.prevStage <> IF_ID_Bundle()
+
+    val exu = Module(new EXUnit)
+    exu.io.pc := 0.U
+    exu.io.prevStage <> ID_EX_Bundle()
+
+    val mau = Module(new MAUnit)
+    mau.io.readData := 0.U
+    mau.io.prevStage <> EX_MA_Bundle()
+
+    val wbu = Module(new WBUnit())
+    wbu.io.prevStage <> MA_WB_Bundle()
+
+    val upcu = Module(new UPCUnit())
+    upcu.io.prevStage <> WB_UPC_Bundle()
+
+    io.readEnable := false.B
+    io.writeEnable := false.B
+    io.writeData := 0.U
+    io.dataStrobe := 0.U
+    io.address := 0.U
     when(stage === StageController.STAGE_IF.U(StageController.STAGE_LEN.W)) {
         // IF 阶段
-        if_id_r.pcNext := pc_r + 4.U(32.W)
-        if_id_r.inst := io.instData
+        ifu.io.pc := pc_r
+        ifu.io.instData := io.instData
+
+        if_id_r <> ifu.io.nextStage
     }.elsewhen(stage === StageController.STAGE_ID.U(StageController.STAGE_LEN.W)) {
         // ID 阶段
-        val rs1 = Wire(UInt(5.W))
-        val rs2 = Wire(UInt(5.W))
-        val rs1Data = Wire(UInt(32.W))
-        val rs2Data = Wire(UInt(32.W))
-        val imm = Wire(UInt(32.W))
-        
-        val regWriteEnable = Wire(Bool())
-        val immSel = Wire(UInt(ControlUnit.IMM_SEL_LEN.W))
-        val executePortASel = Wire(Bool())
-        val executePortBSel = Wire(Bool())
-        val aluOpSel = Wire(UInt(ArithmeticLogicUnit.ALU_SEL_LEN.W))
-        val compOpSel = Wire(UInt(ComparatorUnit.COMP_OP_SEL_LEN.W))
-        val dataMemWriteEnable = Wire(Bool())
-        val dataMemReadEnable = Wire(Bool())
-        val regWriteDataSel = Wire(UInt(ControlUnit.RD_MUX_SEL_LEN.W))
+        idu.io.gprReadPort <> gprFile.io.readPort
+        idu.io.prevStage <> if_id_r
 
-        val lsType = Wire(UInt(LoadAndStoreUnit.LS_TYPE_LEN.W))
+        id_ex_r <> idu.io.nextStage
 
-        rs1 := if_id_r.inst(19, 15)
-        rs2 := if_id_r.inst(24, 20)
-        gprFile.io.readAddress1 := rs1
-        gprFile.io.readAddress2 := rs2
-        rs1Data := gprFile.io.readData1
-        rs2Data := gprFile.io.readData2
-
-        ise.io.inst := if_id_r.inst
-        ise.io.immSel := immSel
-        imm := ise.io.immOut
-
-        cu.io.opCode := if_id_r.inst(6, 0)
-        cu.io.funct3 := if_id_r.inst(14, 12)
-        cu.io.funct7Bit5 := if_id_r.inst(30)
-
-        regWriteEnable := cu.io.regWriteEnable
-        immSel := cu.io.immSel
-        executePortASel := cu.io.executePortASel
-        executePortBSel := cu.io.executePortBSel
-        aluOpSel := cu.io.aluOpSel
-        compOpSel := cu.io.compOpSel
-        lsType := cu.io.lsType
-        dataMemWriteEnable := cu.io.dataMemWriteEnable
-        dataMemReadEnable := cu.io.dataMemReadEnable
-        regWriteDataSel := cu.io.regWriteDataSel
-
-        ioDPI.rs1 := rs1
-        ioDPI.rs2 := rs2
-        ioDPI.rd := if_id_r.inst(11, 7)
-        ioDPI.imm := imm
-
-        id_ex_r.pcNext := if_id_r.pcNext
-        id_ex_r.rs1Data := rs1Data
-        id_ex_r.rs2Data := rs2Data
-        id_ex_r.imm := imm
-        id_ex_r.rd := if_id_r.inst(11, 7)
-        id_ex_r.rs1 := rs1
-        id_ex_r.rs2 := rs2
-        id_ex_r.regWriteEnable := regWriteEnable
-        id_ex_r.aluPortASel := executePortASel
-        id_ex_r.aluPortBSel := executePortBSel
-        id_ex_r.aluOpSel := aluOpSel
-        id_ex_r.compOpSel := compOpSel
-        id_ex_r.lsType := lsType
-        id_ex_r.memWriteEnable := dataMemWriteEnable
-        id_ex_r.memReadEnable := dataMemReadEnable
-        id_ex_r.regWriteDataSel := regWriteDataSel
-        id_ex_r.cuJumpEnable := cu.io.jumpEnable
-        id_ex_r.cuJumpType := cu.io.jumpType
-        id_ex_r.cuBranchEnable := cu.io.branchEnable
-        id_ex_r.inst_jal := cu.io.inst_jal
-        id_ex_r.inst_jalr := cu.io.inst_jalr
+        ioDPI.rs1 := idu.ioDPI.rs1
+        ioDPI.rs2 := idu.ioDPI.rs2
+        ioDPI.rd := idu.ioDPI.rd
+        ioDPI.imm := idu.ioDPI.imm
     }.elsewhen(stage === StageController.STAGE_EX.U(StageController.STAGE_LEN.W)) {
         // EX 阶段
-        val aluOutput = Wire(UInt(32.W))
-        val branchEnable = Wire(Bool())
+        exu.io.pc := pc_r
+        exu.io.prevStage <> id_ex_r
 
-        val aluPortA = Wire(UInt(32.W))
-        val aluPortB = Wire(UInt(32.W))
-        val compPortA = Wire(UInt(32.W))
-        val compPortB = Wire(UInt(32.W))
+        ex_ma_r <> exu.io.nextStage
 
-        aluPortA := Mux(id_ex_r.aluPortASel, id_ex_r.rs1Data, pc_r)
-        aluPortB := Mux(id_ex_r.aluPortBSel, id_ex_r.rs2Data, id_ex_r.imm)
-        compPortA := id_ex_r.rs1Data
-        compPortB := Mux(id_ex_r.aluPortBSel, id_ex_r.imm, id_ex_r.rs2Data)
-
-        aluOutput := alu.io.alu
-        alu.io.aluPortA := aluPortA
-        alu.io.aluPortB := aluPortB
-        alu.io.aluSel := id_ex_r.aluOpSel
-
-        branchEnable := compU.io.comp
-        compU.io.compPortA := compPortA
-        compU.io.compPortB := compPortB
-        compU.io.compOpSel := id_ex_r.compOpSel
-
-        pcTargetCtrl.io.cuJumpEnable := id_ex_r.cuJumpEnable
-        pcTargetCtrl.io.cuJumpType := id_ex_r.cuJumpType
-        pcTargetCtrl.io.compBranchEnable := branchEnable
-        pcTargetCtrl.io.cuBranchEnable := id_ex_r.cuBranchEnable
-        pcTargetCtrl.io.pc := pc_r
-        pcTargetCtrl.io.imm := id_ex_r.imm
-        pcTargetCtrl.io.pcNext := id_ex_r.pcNext
-        pcTargetCtrl.io.rs1Data := id_ex_r.rs1Data
-
-        ioDPI.rs1Data := id_ex_r.rs1Data
-        ioDPI.rs2Data := id_ex_r.rs1Data
-
-        ex_ma_r.pcNext := id_ex_r.pcNext
-        ex_ma_r.pcTarget := pcTargetCtrl.io.pcTarget
-        ex_ma_r.aluOutput := aluOutput
-        ex_ma_r.compBranchEnable := branchEnable
-        ex_ma_r.storeData := id_ex_r.rs2Data
-        ex_ma_r.imm := id_ex_r.imm
-        ex_ma_r.rd := id_ex_r.rd
-        ex_ma_r.rs1 := id_ex_r.rs1
-        ex_ma_r.rs2 := id_ex_r.rs2
-        ex_ma_r.lsType := id_ex_r.lsType
-        ex_ma_r.memReadEnable := id_ex_r.memReadEnable
-        ex_ma_r.memWriteEnable := id_ex_r.memWriteEnable
-        ex_ma_r.regWriteEnable := id_ex_r.regWriteEnable
-        ex_ma_r.regWriteDataSel := id_ex_r.regWriteDataSel
-        ex_ma_r.inst_jal := id_ex_r.inst_jal
-        ex_ma_r.inst_jalr := id_ex_r.inst_jalr
+        ioDPI.rs1Data := exu.ioDPI.rs1Data
+        ioDPI.rs2Data := exu.ioDPI.rs2Data
     }.elsewhen(stage === StageController.STAGE_MA.U(StageController.STAGE_LEN.W)) {
         // MA 阶段
-        val dmemData = Wire(UInt(32.W))
+        mau.io.readData := io.readData
+        mau.io.prevStage <> ex_ma_r
 
-        val readDataAligned = Wire(UInt(32.W))
-        val writeDataUnaligned = Wire(UInt(32.W))
+        io.readEnable := mau.io.readEnable
+        io.writeEnable := mau.io.writeEnable
+        io.writeData := mau.io.writeData
+        io.dataStrobe := mau.io.dataStrobe
+        io.address := mau.io.address
+        ma_wb_r <> mau.io.nextStage
 
-        readDataAligned := lsu.io.readDataOut
-        lsu.io.readDataIn := io.readData
-        io.writeData := lsu.io.writeDataOut
-        lsu.io.writeDataIn := writeDataUnaligned
-        lsu.io.lsType := ex_ma_r.lsType
-        io.dataStrobe := lsu.io.dataStrobe
-
-        io.address := ex_ma_r.aluOutput
-        dmemData := readDataAligned
-        io.writeEnable := ex_ma_r.memWriteEnable
-        io.readEnable := ex_ma_r.memReadEnable
-        writeDataUnaligned := ex_ma_r.storeData
-
-        ioDPI.inst_jal := ex_ma_r.inst_jal
-        ioDPI.inst_jalr := ex_ma_r.inst_jalr
-
-        ma_wb_r.pcNext := ex_ma_r.pcNext
-        ma_wb_r.pcTarget := ex_ma_r.pcTarget
-        ma_wb_r.memReadData := dmemData
-        ma_wb_r.aluOutput := ex_ma_r.aluOutput
-        ma_wb_r.compBranchEnable := ex_ma_r.compBranchEnable
-        ma_wb_r.imm := ex_ma_r.imm
-        ma_wb_r.rd := ex_ma_r.rd
-        ma_wb_r.rs1 := ex_ma_r.rs1
-        ma_wb_r.rs2 := ex_ma_r.rs2
-        ma_wb_r.regWriteEnable := ex_ma_r.regWriteEnable
-        ma_wb_r.regWriteDataSel := ex_ma_r.regWriteDataSel
+        ioDPI.inst_jal := mau.ioDPI.inst_jal
+        ioDPI.inst_jalr := mau.ioDPI.inst_jalr
     }.elsewhen(stage === StageController.STAGE_WB.U(StageController.STAGE_LEN.W)) {
         // WB 阶段
-        val gprData = Wire(UInt(32.W))
+        wbu.io.gprWritePort <> gprFile.io.writePort
+        wbu.io.prevStage <> ma_wb_r
 
-        {
-            // default values
-            // regData := DontCare
-            gprData := 0.U(32.W)
-
-            when(ma_wb_r.regWriteDataSel === ControlUnit.RD_MUX_DMEM.U(ControlUnit.RD_MUX_SEL_LEN.W)) {
-                gprData := ma_wb_r.memReadData
-            }
-            when(ma_wb_r.regWriteDataSel === ControlUnit.RD_MUX_ALU.U(ControlUnit.RD_MUX_SEL_LEN.W)) {
-                gprData := ma_wb_r.aluOutput
-            }
-            when(ma_wb_r.regWriteDataSel === ControlUnit.RD_MUX_BCU.U(ControlUnit.RD_MUX_SEL_LEN.W)) {
-                gprData := Cat(0.U(31.W), ma_wb_r.compBranchEnable.asUInt)
-            }
-            when(ma_wb_r.regWriteDataSel === ControlUnit.RD_MUX_IMM.U(ControlUnit.RD_MUX_SEL_LEN.W)) {
-                gprData := ma_wb_r.imm
-            }
-            when(ma_wb_r.regWriteDataSel === ControlUnit.RD_MUX_PC_N.U(ControlUnit.RD_MUX_SEL_LEN.W)) {
-                gprData := ma_wb_r.pcNext
-            }
-        }
-
-        gprFile.io.writeEnable := ma_wb_r.regWriteEnable
-        gprFile.io.writeData := gprData
-        gprFile.io.writeAddress := ma_wb_r.rd
-        gprFile.io.readAddress1 := ma_wb_r.rs1
-        gprFile.io.readAddress2 := ma_wb_r.rs2
-
-        wb_upc_r.pcTarget := ma_wb_r.pcTarget
+        wb_upc_r <> wbu.io.nextStage
     }.elsewhen(stage === StageController.STAGE_UPC.U(StageController.STAGE_LEN.W)) {
         // UPC 阶段
-        pc_r := wb_upc_r.pcTarget
+        upcu.io.prevStage <> wb_upc_r
+
+        pc_r := upcu.io.pc
     }
 }
 

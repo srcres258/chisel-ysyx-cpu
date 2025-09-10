@@ -1,6 +1,8 @@
-package top.srcres258.ysyx.npc
+package top.srcres258.ysyx.npc.dpi
 
 import chisel3._
+
+import top.srcres258.ysyx.npc.StageController
 
 /**
   * 用于向外部 DPI 提供信息的线集，仅供外部后台仿真环境获取信息用
@@ -50,4 +52,23 @@ class DPIBundle extends Bundle {
       * 输出：当前执行阶段
       */
     val stage = Output(UInt(StageController.STAGE_LEN.W))
+}
+
+object DPIBundle {
+    def defaultIO(): DPIBundle = {
+        val default = IO(new DPIBundle)
+        for (i <- 0 until default.registers.length) {
+            default.registers(i) := 0.U
+        }
+        default.inst_jal := false.B
+        default.inst_jalr := false.B
+        default.rs1 := 0.U
+        default.rs2 := 0.U
+        default.rd := 0.U
+        default.imm := 0.U
+        default.rs1Data := 0.U
+        default.rs2Data := 0.U
+        default.stage := 0.U
+        default
+    }
 }
