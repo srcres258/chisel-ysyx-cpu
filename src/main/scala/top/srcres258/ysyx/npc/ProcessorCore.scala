@@ -107,6 +107,7 @@ class ProcessorCore extends Module {
         dpi.io.memReadEnable := ex_ma_r.memReadEnable
     }
     dpi.io.stage := stage
+    dpi.io.ecallEnable := id_ex_r.ecallEnable
 
     val ioDPI = IO(new DPIBundle)
     for (i <- 0 until ioDPI.gprs.length) {
@@ -126,6 +127,7 @@ class ProcessorCore extends Module {
     ioDPI.rs1Data := 0.U
     ioDPI.rs2Data := 0.U
     ioDPI.stage := stage
+    ioDPI.ecallEnable := id_ex_r.ecallEnable
 
     val ifu = Module(new IFUnit)
     ifu.io.pc := 0.U

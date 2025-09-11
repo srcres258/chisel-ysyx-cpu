@@ -44,5 +44,11 @@ class DPIAdapter extends BlackBox with HasBlackBoxPath {
           * 处理器状态信息。
           */
         val stage = Input(UInt(StageController.STAGE_LEN.W))
+
+        /**
+          * 输入：是否触发环境调用。
+          * 检测到上升沿时自动进行 etrace 的检测与记录。
+          */
+        val ecallEnable = Input(Bool())
     })
 }

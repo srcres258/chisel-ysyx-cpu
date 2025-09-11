@@ -72,6 +72,11 @@ class DPIBundle extends Bundle {
       * 输出：当前执行阶段
       */
     val stage = Output(UInt(StageController.STAGE_LEN.W))
+
+    /**
+      * 输出：是否触发环境调用
+      */
+    val ecallEnable = Output(Bool())
 }
 
 object DPIBundle {
@@ -94,6 +99,7 @@ object DPIBundle {
         default.rs1Data := 0.U
         default.rs2Data := 0.U
         default.stage := 0.U
+        default.ecallEnable := false.B
         default
     }
 }
