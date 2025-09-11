@@ -118,8 +118,8 @@ class ProcessorCore extends Module {
     ioDPI.csr_mepc := csrFile.io.registers(ControlAndStatusRegisterFile.CSR_MEPC)
     ioDPI.csr_mcause := csrFile.io.registers(ControlAndStatusRegisterFile.CSR_MCAUSE)
     ioDPI.csr_mtval := csrFile.io.registers(ControlAndStatusRegisterFile.CSR_MTVAL)
-    ioDPI.inst_jal := 0.U
-    ioDPI.inst_jalr := 0.U
+    ioDPI.inst_jal := ex_ma_r.inst_jal
+    ioDPI.inst_jalr := ex_ma_r.inst_jalr
     ioDPI.rs1 := 0.U
     ioDPI.rs2 := 0.U
     ioDPI.rd := 0.U
@@ -188,6 +188,10 @@ class ProcessorCore extends Module {
 
         ex_ma_r <> exu.io.nextStage
 
+        ioDPI.rs1 := exu.io.nextStage.rs1
+        ioDPI.rs2 := exu.io.nextStage.rs2
+        ioDPI.rd := exu.io.nextStage.rd
+        ioDPI.imm := exu.io.nextStage.imm
         ioDPI.rs1Data := exu.ioDPI.rs1Data
         ioDPI.rs2Data := exu.ioDPI.rs2Data
     }.elsewhen(stage === StageController.STAGE_MA.U(StageController.STAGE_LEN.W)) {
@@ -202,8 +206,11 @@ class ProcessorCore extends Module {
         io.address := mau.io.address
         ma_wb_r <> mau.io.nextStage
 
-        ioDPI.inst_jal := mau.ioDPI.inst_jal
-        ioDPI.inst_jalr := mau.ioDPI.inst_jalr
+        ioDPI.rs1 := mau.io.nextStage.rs1
+        ioDPI.rs2 := mau.io.nextStage.rs2
+        ioDPI.rd := mau.io.nextStage.rd
+        ioDPI.imm := mau.io.nextStage.imm
+        ioDPI.rs1Data := mau.io.nextStage.rs1Data
     }.elsewhen(stage === StageController.STAGE_WB.U(StageController.STAGE_LEN.W)) {
         // WB 阶段
         wbu.io.pc := pc_r
