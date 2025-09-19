@@ -13,8 +13,9 @@ class MA_WB_Bundle(
     /**
       * xLen: 处理器位数，在 RV32I 指令集中为 32
       */
-    val xLen: Int = 32
-) extends Bundle {
+    xLen: Int = 32
+) extends StageUnitBundle(xLen) {
+    val pcCur = UInt(xLen.W)
     val pcNext = UInt(xLen.W)
     val pcTarget = UInt(xLen.W)
     val memReadData = UInt(xLen.W)
@@ -40,6 +41,8 @@ class MA_WB_Bundle(
 object MA_WB_Bundle {
     def apply(xLen: Int = 32): MA_WB_Bundle = {
         val default = Wire(new MA_WB_Bundle(xLen))
+
+        default.pcCur := 0.U
         default.pcNext := 0.U
         default.pcTarget := ProcessorCore.PC_INITIAL_VAL
         default.memReadData := 0.U
@@ -59,6 +62,7 @@ object MA_WB_Bundle {
         default.regWriteDataSel := 0.U
         default.csrRegWriteDataSel := 0.U
         default.ecallEnable := false.B
+        
         default
     }
 }

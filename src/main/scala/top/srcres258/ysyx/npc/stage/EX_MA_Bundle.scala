@@ -13,8 +13,9 @@ class EX_MA_Bundle(
     /**
       * xLen: 处理器位数，在 RV32I 指令集中为 32
       */
-    val xLen: Int = 32
-) extends Bundle {
+    xLen: Int = 32
+) extends StageUnitBundle(xLen) {
+    val pcCur = UInt(xLen.W)
     val pcNext = UInt(xLen.W)
     val pcTarget = UInt(xLen.W)
     // 注：由于分支目标地址本身也经 ALU 计算，所以当分支启用时，
@@ -48,6 +49,8 @@ class EX_MA_Bundle(
 object EX_MA_Bundle {
     def apply(xLen: Int = 32): EX_MA_Bundle = {
         val default = Wire(new EX_MA_Bundle(xLen))
+
+        default.pcCur := 0.U
         default.pcNext := 0.U
         default.pcTarget := 0.U
         default.aluOutput := 0.U
@@ -72,6 +75,7 @@ object EX_MA_Bundle {
         default.ecallEnable := false.B
         default.inst_jal := false.B
         default.inst_jalr := false.B
+        
         default
     }
 }

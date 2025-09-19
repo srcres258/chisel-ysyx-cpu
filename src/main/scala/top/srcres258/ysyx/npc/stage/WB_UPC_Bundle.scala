@@ -10,15 +10,19 @@ class WB_UPC_Bundle(
     /**
       * xLen: 处理器位数，在 RV32I 指令集中为 32
       */
-    val xLen: Int = 32
-) extends Bundle {
+    xLen: Int = 32
+) extends StageUnitBundle(xLen) {
+    val pcCur = UInt(xLen.W)
     val pcTarget = UInt(xLen.W)
 }
 
 object WB_UPC_Bundle {
     def apply(xLen: Int = 32): WB_UPC_Bundle = {
         val default = Wire(new WB_UPC_Bundle(xLen))
+
+        default.pcCur := 0.U
         default.pcTarget := 0.U
+        
         default
     }
 }

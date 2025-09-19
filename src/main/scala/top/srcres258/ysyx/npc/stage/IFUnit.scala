@@ -15,12 +15,56 @@ class IFUnit(
     val xLen: Int = 32
 ) extends Module {
     val io = IO(new Bundle {
-        val pc = Input(UInt(xLen.W))
-        val instData = Input(UInt(xLen.W))
+        val input = Flipped(Decoupled(Output(new IFUnit.InputBundle(xLen))))
 
-        val nextStage = Output(new IF_ID_Bundle(xLen))
+        val nextStage = Decoupled(Output(new IF_ID_Bundle(xLen)))
     });
 
-    io.nextStage.pcNext := io.pc + 4.U(xLen.W)
-    io.nextStage.inst := io.instData
+    val inputData = RegInit(IFUnit.InputBundle(xLen))
+    val nextStageData = Wire(new IF_ID_Bundle(xLen))
+    val nextStagePrepared = RegInit(false.B)
+
+    val s_nextStage_idle :: s_nextStage_waitReady :: Nil = Enum(2)
+
+    val nextStageState = RegInit(s_nextStage_idle)
+    nextStageState := MuxLookup(nextStageState, s_nextStage_idle)(List(
+        s_nextStage_idle -> Mux(nextStagePrepared, s_nextStage_waitReady, s_nextStage_idle),
+        s_nextStage_waitReady -> Mux(io.nextStage.ready, s_nextStage_idle, s_nextStage_waitReady)
+    ))
+    io.nextStage.valid := nextStageState === s_nextStage_waitReady
+    io.nextStage.bits := nextStageData
+
+    when(io.input.valid) {
+        inputData := io.input.bits
+        nextStagePrepared := true.B
+        io.input.ready := true.B
+    }.otherwise {
+        nextStagePrepared := false.B
+        io.input.ready := false.B
+    }
+
+    nextStageData.pcCur := inputData.pc
+    nextStageData.pcNext := inputData.pc + 4.U(xLen.W)
+    nextStageData.inst := inputData.instData
+}
+
+object IFUnit {
+    class InputBundle(
+        /**
+          * xLen: 处理器位数，在 RV32I 指令集中为 32
+          */
+        val xLen: Int = 32
+    ) extends Bundle {
+        val pc = UInt(xLen.W)
+        val instData = UInt(xLen.W)
+    }
+
+    object InputBundle {
+        def apply(xLen: Int = 32): InputBundle = {
+            val result = Wire(new InputBundle(xLen))
+            result.pc := 0.U(xLen.W)
+            result.instData := 0.U(xLen.W)
+            result
+        }
+    }
 }

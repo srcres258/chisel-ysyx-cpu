@@ -5,6 +5,7 @@ import chisel3.util._
 
 import top.srcres258.ysyx.npc.LoadAndStoreUnit
 import top.srcres258.ysyx.npc.dpi.DPIBundle
+import top.srcres258.ysyx.npc.debug.DebugBundle
 
 /**
   * 处理器的访存 (Memory Access) 单元。
@@ -23,10 +24,45 @@ class MAUnit(
         val dataStrobe = Output(UInt(LoadAndStoreUnit.DATA_STROBE_LEN.W))
         val address = Output(UInt(xLen.W))
 
-        val prevStage = Input(new EX_MA_Bundle(xLen))
-        val nextStage = Output(new MA_WB_Bundle(xLen))
+        val prevStage = Flipped(Decoupled(Output(new EX_MA_Bundle(xLen))))
+        val nextStage = Decoupled(Output(new MA_WB_Bundle(xLen)))
+
+        val debug = Output(new DebugBundle {
+            val inst_jal = Bool()
+            val inst_jalr = Bool()
+            val memWriteEnable = Bool()
+            val memReadEnable = Bool()
+        })
     })
     val ioDPI = DPIBundle.defaultIO()
+
+    val prevStageData = RegInit(EX_MA_Bundle(xLen))
+    val nextStageData = Wire(new MA_WB_Bundle(xLen))
+    val nextStagePrepared = RegInit(false.B)
+
+    val s_prevStage_idle :: s_prevStage_waitReset :: Nil = Enum(2)
+    val s_nextStage_idle :: s_nextStage_waitReady :: Nil = Enum(2)
+
+    val prevStageState = RegInit(s_prevStage_idle)
+    val nextStageState = RegInit(s_nextStage_idle)
+    prevStageState := MuxLookup(prevStageState, s_prevStage_idle)(List(
+        s_prevStage_idle -> Mux(io.prevStage.valid, s_prevStage_waitReset, s_prevStage_idle),
+        s_prevStage_waitReset -> Mux(!io.prevStage.valid, s_prevStage_idle, s_prevStage_waitReset)
+    ))
+    nextStageState := MuxLookup(nextStageState, s_nextStage_idle)(List(
+        s_nextStage_idle -> Mux(nextStagePrepared, s_nextStage_waitReady, s_nextStage_idle),
+        s_nextStage_waitReady -> Mux(io.nextStage.ready, s_nextStage_idle, s_nextStage_waitReady)
+    ))
+    io.prevStage.ready := prevStageState === s_prevStage_waitReset
+    io.nextStage.valid := nextStageState === s_nextStage_waitReady
+    io.nextStage.bits := nextStageData
+    when(io.prevStage.valid) {
+        prevStageData := io.prevStage.bits
+        nextStagePrepared := true.B
+    }
+    when(nextStagePrepared && io.nextStage.ready) {
+        nextStagePrepared := false.B
+    }
 
     val dmemData = Wire(UInt(xLen.W))
 
@@ -38,35 +74,41 @@ class MAUnit(
     lsu.io.readDataIn := io.readData
     io.writeData := lsu.io.writeDataOut
     lsu.io.writeDataIn := writeDataUnaligned
-    lsu.io.lsType := io.prevStage.lsType
+    lsu.io.lsType := prevStageData.lsType
     io.dataStrobe := lsu.io.dataStrobe
 
-    io.address := io.prevStage.aluOutput
+    io.address := prevStageData.aluOutput
     dmemData := readDataAligned
-    io.writeEnable := io.prevStage.memWriteEnable
-    io.readEnable := io.prevStage.memReadEnable
-    writeDataUnaligned := io.prevStage.storeData
+    io.writeEnable := prevStageData.memWriteEnable
+    io.readEnable := prevStageData.memReadEnable
+    writeDataUnaligned := prevStageData.storeData
 
-    ioDPI.inst_jal := io.prevStage.inst_jal
-    ioDPI.inst_jalr := io.prevStage.inst_jalr
+    ioDPI.inst_jal := prevStageData.inst_jal
+    ioDPI.inst_jalr := prevStageData.inst_jalr
 
-    io.nextStage.pcNext := io.prevStage.pcNext
-    io.nextStage.pcTarget := io.prevStage.pcTarget
-    io.nextStage.memReadData := dmemData
-    io.nextStage.aluOutput := io.prevStage.aluOutput
-    io.nextStage.compBranchEnable := io.prevStage.compBranchEnable
-    io.nextStage.rs1Data := io.prevStage.rs1Data
-    io.nextStage.imm := io.prevStage.imm
-    io.nextStage.rd := io.prevStage.rd
-    io.nextStage.rs1 := io.prevStage.rs1
-    io.nextStage.rs2 := io.prevStage.rs2
-    io.nextStage.csr := io.prevStage.csr
-    io.nextStage.csrData := io.prevStage.csrData
-    io.nextStage.zimm := io.prevStage.zimm
-    io.nextStage.ecallCause := io.prevStage.ecallCause
-    io.nextStage.regWriteEnable := io.prevStage.regWriteEnable
-    io.nextStage.csrRegWriteEnable := io.prevStage.csrRegWriteEnable
-    io.nextStage.regWriteDataSel := io.prevStage.regWriteDataSel
-    io.nextStage.csrRegWriteDataSel := io.prevStage.csrRegWriteDataSel
-    io.nextStage.ecallEnable := io.prevStage.ecallEnable
+    io.debug.inst_jal := prevStageData.inst_jal
+    io.debug.inst_jalr := prevStageData.inst_jalr
+    io.debug.memWriteEnable := prevStageData.memWriteEnable
+    io.debug.memReadEnable := prevStageData.memReadEnable
+
+    nextStageData.pcCur := prevStageData.pcCur
+    nextStageData.pcNext := prevStageData.pcNext
+    nextStageData.pcTarget := prevStageData.pcTarget
+    nextStageData.memReadData := dmemData
+    nextStageData.aluOutput := prevStageData.aluOutput
+    nextStageData.compBranchEnable := prevStageData.compBranchEnable
+    nextStageData.rs1Data := prevStageData.rs1Data
+    nextStageData.imm := prevStageData.imm
+    nextStageData.rd := prevStageData.rd
+    nextStageData.rs1 := prevStageData.rs1
+    nextStageData.rs2 := prevStageData.rs2
+    nextStageData.csr := prevStageData.csr
+    nextStageData.csrData := prevStageData.csrData
+    nextStageData.zimm := prevStageData.zimm
+    nextStageData.ecallCause := prevStageData.ecallCause
+    nextStageData.regWriteEnable := prevStageData.regWriteEnable
+    nextStageData.csrRegWriteEnable := prevStageData.csrRegWriteEnable
+    nextStageData.regWriteDataSel := prevStageData.regWriteDataSel
+    nextStageData.csrRegWriteDataSel := prevStageData.csrRegWriteDataSel
+    nextStageData.ecallEnable := prevStageData.ecallEnable
 }

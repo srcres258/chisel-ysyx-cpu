@@ -11,6 +11,7 @@ import top.srcres258.ysyx.npc.ImmediateSignExtend
 import top.srcres258.ysyx.npc.regfile.GeneralPurposeRegisterFile
 import top.srcres258.ysyx.npc.regfile.ControlAndStatusRegisterFile
 import top.srcres258.ysyx.npc.dpi.DPIBundle
+import top.srcres258.ysyx.npc.debug.DebugBundle
 
 /**
   * 处理器的译码 (Instruction Decode) 单元。
@@ -27,10 +28,42 @@ class IDUnit(
         val csrReadPort2 = Flipped(new ControlAndStatusRegisterFile.ReadPort(xLen))
         val csrReadPort3 = Flipped(new ControlAndStatusRegisterFile.ReadPort(xLen))
 
-        val prevStage = Input(new IF_ID_Bundle(xLen))
-        val nextStage = Output(new ID_EX_Bundle(xLen))
+        val prevStage = Flipped(Decoupled(Output(new IF_ID_Bundle(xLen))))
+        val nextStage = Decoupled(Output(new ID_EX_Bundle(xLen)))
+
+        val debug = Output(new DebugBundle {
+            val inst = UInt(xLen.W)
+        })
     })
     val ioDPI = DPIBundle.defaultIO()
+
+    val prevStageData = RegInit(IF_ID_Bundle(xLen))
+    val nextStageData = Wire(new ID_EX_Bundle(xLen))
+    val nextStagePrepared = RegInit(false.B)
+
+    val s_prevStage_idle :: s_prevStage_waitReset :: Nil = Enum(2)
+    val s_nextStage_idle :: s_nextStage_waitReady :: Nil = Enum(2)
+
+    val prevStageState = RegInit(s_prevStage_idle)
+    val nextStageState = RegInit(s_nextStage_idle)
+    prevStageState := MuxLookup(prevStageState, s_prevStage_idle)(List(
+        s_prevStage_idle -> Mux(io.prevStage.valid, s_prevStage_waitReset, s_prevStage_idle),
+        s_prevStage_waitReset -> Mux(!io.prevStage.valid, s_prevStage_idle, s_prevStage_waitReset)
+    ))
+    nextStageState := MuxLookup(nextStageState, s_nextStage_idle)(List(
+        s_nextStage_idle -> Mux(nextStagePrepared, s_nextStage_waitReady, s_nextStage_idle),
+        s_nextStage_waitReady -> Mux(io.nextStage.ready, s_nextStage_idle, s_nextStage_waitReady)
+    ))
+    io.prevStage.ready := prevStageState === s_prevStage_waitReset
+    io.nextStage.valid := nextStageState === s_nextStage_waitReady
+    io.nextStage.bits := nextStageData
+    when(io.prevStage.valid) {
+        prevStageData := io.prevStage.bits
+        nextStagePrepared := true.B
+    }
+    when(nextStagePrepared && io.nextStage.ready) {
+        nextStagePrepared := false.B
+    }
 
     val rs1 = Wire(UInt(5.W))
     val rs2 = Wire(UInt(5.W))
@@ -57,15 +90,15 @@ class IDUnit(
 
     val lsType = Wire(UInt(LoadAndStoreUnit.LS_TYPE_LEN.W))
 
-    rs1 := io.prevStage.inst(19, 15)
-    rs2 := io.prevStage.inst(24, 20)
+    rs1 := prevStageData.inst(19, 15)
+    rs2 := prevStageData.inst(24, 20)
     io.gprReadPort.readAddress1 := rs1
     io.gprReadPort.readAddress2 := rs2
     rs1Data := io.gprReadPort.readData1
     rs2Data := io.gprReadPort.readData2
-    rd := io.prevStage.inst(11, 7)
+    rd := prevStageData.inst(11, 7)
 
-    csr := io.prevStage.inst(31, 20)
+    csr := prevStageData.inst(31, 20)
     io.csrReadPort1.readAddress := csr
     csrData := io.csrReadPort1.readData
 
@@ -78,14 +111,14 @@ class IDUnit(
     tvecData := io.csrReadPort3.readData
 
     val ise = Module(new ImmediateSignExtend(xLen))
-    ise.io.inst := io.prevStage.inst
+    ise.io.inst := prevStageData.inst
     ise.io.immSel := immSel
     imm := ise.io.immOut
 
     val cu = Module(new ControlUnit(xLen))
-    cu.io.opCode := io.prevStage.inst(6, 0)
-    cu.io.funct3 := io.prevStage.inst(14, 12)
-    cu.io.funct7 := io.prevStage.inst(31, 25)
+    cu.io.opCode := prevStageData.inst(6, 0)
+    cu.io.funct3 := prevStageData.inst(14, 12)
+    cu.io.funct7 := prevStageData.inst(31, 25)
     cu.io.rd := rd
     cu.io.rs1 := rs1
     cu.io.rs2 := rs2
@@ -107,35 +140,38 @@ class IDUnit(
     ioDPI.rd := rd
     ioDPI.imm := imm
 
-    io.nextStage.pcNext := io.prevStage.pcNext
-    io.nextStage.rs1Data := rs1Data
-    io.nextStage.rs2Data := rs2Data
-    io.nextStage.imm := imm
-    io.nextStage.rd := rd
-    io.nextStage.rs1 := rs1
-    io.nextStage.rs2 := rs2
-    io.nextStage.csr := csr
-    io.nextStage.csrData := csrData
-    io.nextStage.zimm := zimm
-    io.nextStage.epcData := epcData
-    io.nextStage.tvecData := tvecData
-    io.nextStage.ecallCause := ControlUnit.MCAUSE_ECALL_FROM_M_MODE.U
-    io.nextStage.regWriteEnable := regWriteEnable
-    io.nextStage.csrRegWriteEnable := cu.io.csrRegWriteEnable
-    io.nextStage.aluPortASel := executePortASel
-    io.nextStage.aluPortBSel := executePortBSel
-    io.nextStage.aluOpSel := aluOpSel
-    io.nextStage.compOpSel := compOpSel
-    io.nextStage.lsType := lsType
-    io.nextStage.memWriteEnable := dataMemWriteEnable
-    io.nextStage.memReadEnable := dataMemReadEnable
-    io.nextStage.regWriteDataSel := regWriteDataSel
-    io.nextStage.csrRegWriteDataSel := csrRegWriteDataSel
-    io.nextStage.cuJumpEnable := cu.io.jumpEnable
-    io.nextStage.cuJumpType := cu.io.jumpType
-    io.nextStage.cuBranchEnable := cu.io.branchEnable
-    io.nextStage.epcRecoverEnable := cu.io.epcRecoverEnable
-    io.nextStage.ecallEnable := cu.io.ecallEnable
-    io.nextStage.inst_jal := cu.io.inst_jal
-    io.nextStage.inst_jalr := cu.io.inst_jalr
+    io.debug.inst := prevStageData.inst
+
+    nextStageData.pcCur := prevStageData.pcCur
+    nextStageData.pcNext := prevStageData.pcNext
+    nextStageData.rs1Data := rs1Data
+    nextStageData.rs2Data := rs2Data
+    nextStageData.imm := imm
+    nextStageData.rd := rd
+    nextStageData.rs1 := rs1
+    nextStageData.rs2 := rs2
+    nextStageData.csr := csr
+    nextStageData.csrData := csrData
+    nextStageData.zimm := zimm
+    nextStageData.epcData := epcData
+    nextStageData.tvecData := tvecData
+    nextStageData.ecallCause := ControlUnit.MCAUSE_ECALL_FROM_M_MODE.U
+    nextStageData.regWriteEnable := regWriteEnable
+    nextStageData.csrRegWriteEnable := cu.io.csrRegWriteEnable
+    nextStageData.aluPortASel := executePortASel
+    nextStageData.aluPortBSel := executePortBSel
+    nextStageData.aluOpSel := aluOpSel
+    nextStageData.compOpSel := compOpSel
+    nextStageData.lsType := lsType
+    nextStageData.memWriteEnable := dataMemWriteEnable
+    nextStageData.memReadEnable := dataMemReadEnable
+    nextStageData.regWriteDataSel := regWriteDataSel
+    nextStageData.csrRegWriteDataSel := csrRegWriteDataSel
+    nextStageData.cuJumpEnable := cu.io.jumpEnable
+    nextStageData.cuJumpType := cu.io.jumpType
+    nextStageData.cuBranchEnable := cu.io.branchEnable
+    nextStageData.epcRecoverEnable := cu.io.epcRecoverEnable
+    nextStageData.ecallEnable := cu.io.ecallEnable
+    nextStageData.inst_jal := cu.io.inst_jal
+    nextStageData.inst_jalr := cu.io.inst_jalr
 }

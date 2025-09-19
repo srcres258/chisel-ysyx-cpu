@@ -15,8 +15,9 @@ class ID_EX_Bundle(
     /**
       * xLen: 处理器位数，在 RV32I 指令集中为 32
       */
-    val xLen: Int = 32
-) extends Bundle {
+    xLen: Int = 32
+) extends StageUnitBundle(xLen) {
+    val pcCur = UInt(xLen.W)
     val pcNext = UInt(xLen.W)
     val rs1Data = UInt(xLen.W)
     val rs2Data = UInt(xLen.W)
@@ -55,6 +56,8 @@ class ID_EX_Bundle(
 object ID_EX_Bundle {
     def apply(xLen: Int = 32): ID_EX_Bundle = {
         val default = Wire(new ID_EX_Bundle(xLen))
+
+        default.pcCur := 0.U
         default.pcNext := 0.U
         default.rs1Data := 0.U
         default.rs2Data := 0.U
@@ -86,6 +89,7 @@ object ID_EX_Bundle {
         default.ecallEnable := false.B
         default.inst_jal := false.B
         default.inst_jalr := false.B
+        
         default
     }
 }
