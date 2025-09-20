@@ -27,16 +27,10 @@ class MAUnit(
         val prevStage = Flipped(Decoupled(Output(new EX_MA_Bundle(xLen))))
         val nextStage = Decoupled(Output(new MA_WB_Bundle(xLen)))
 
-        val debug = Output(new DebugBundle {
-            val inst_jal = Bool()
-            val inst_jalr = Bool()
-            val memWriteEnable = Bool()
-            val memReadEnable = Bool()
-        })
+        val debug = Output(new MAUnitDebugBundle(xLen))
     })
-    val ioDPI = DPIBundle.defaultIO()
 
-    val prevStageData = RegInit(EX_MA_Bundle(xLen))
+    val prevStageData = Wire(new EX_MA_Bundle(xLen))
     val nextStageData = Wire(new MA_WB_Bundle(xLen))
     val nextStagePrepared = RegInit(false.B)
 
@@ -53,11 +47,11 @@ class MAUnit(
         s_nextStage_idle -> Mux(nextStagePrepared, s_nextStage_waitReady, s_nextStage_idle),
         s_nextStage_waitReady -> Mux(io.nextStage.ready, s_nextStage_idle, s_nextStage_waitReady)
     ))
-    io.prevStage.ready := prevStageState === s_prevStage_waitReset
+    io.prevStage.ready := !nextStagePrepared
     io.nextStage.valid := nextStageState === s_nextStage_waitReady
     io.nextStage.bits := nextStageData
+    prevStageData := io.prevStage.bits
     when(io.prevStage.valid) {
-        prevStageData := io.prevStage.bits
         nextStagePrepared := true.B
     }
     when(nextStagePrepared && io.nextStage.ready) {
@@ -83,11 +77,6 @@ class MAUnit(
     io.readEnable := prevStageData.memReadEnable
     writeDataUnaligned := prevStageData.storeData
 
-    ioDPI.inst_jal := prevStageData.inst_jal
-    ioDPI.inst_jalr := prevStageData.inst_jalr
-
-    io.debug.inst_jal := prevStageData.inst_jal
-    io.debug.inst_jalr := prevStageData.inst_jalr
     io.debug.memWriteEnable := prevStageData.memWriteEnable
     io.debug.memReadEnable := prevStageData.memReadEnable
 
@@ -111,4 +100,20 @@ class MAUnit(
     nextStageData.regWriteDataSel := prevStageData.regWriteDataSel
     nextStageData.csrRegWriteDataSel := prevStageData.csrRegWriteDataSel
     nextStageData.ecallEnable := prevStageData.ecallEnable
+}
+
+class MAUnitDebugBundle(val xLen: Int = 32) extends DebugBundle {
+    val memWriteEnable = Bool()
+    val memReadEnable = Bool()
+}
+
+object MAUnitDebugBundle {
+    def apply(xLen: Int = 32): MAUnitDebugBundle = {
+        val default = Wire(new MAUnitDebugBundle(xLen))
+
+        default.memWriteEnable := false.B
+        default.memReadEnable := false.B
+
+        default
+    }
 }

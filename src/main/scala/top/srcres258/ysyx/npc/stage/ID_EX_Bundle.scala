@@ -7,6 +7,7 @@ import top.srcres258.ysyx.npc.ArithmeticLogicUnit
 import top.srcres258.ysyx.npc.ComparatorUnit
 import top.srcres258.ysyx.npc.LoadAndStoreUnit
 import top.srcres258.ysyx.npc.ControlUnit
+import os.group.set
 
 /**
   * 从 ID 阶段到 EX 阶段所需流转的数据。
@@ -54,41 +55,45 @@ class ID_EX_Bundle(
 }
 
 object ID_EX_Bundle {
+    private def setDefaultValues(bundle: ID_EX_Bundle): Unit = {
+        bundle.pcCur := 0.U
+        bundle.pcNext := 0.U
+        bundle.rs1Data := 0.U
+        bundle.rs2Data := 0.U
+        bundle.imm := 0.U
+        bundle.rd := 0.U
+        bundle.rs1 := 0.U
+        bundle.rs2 := 0.U
+        bundle.csr := 0.U
+        bundle.csrData := 0.U
+        bundle.zimm := 0.U
+        bundle.epcData := 0.U
+        bundle.tvecData := 0.U
+        bundle.ecallCause := 0.U
+        bundle.regWriteEnable := false.B
+        bundle.csrRegWriteEnable := false.B
+        bundle.aluPortASel := false.B
+        bundle.aluPortBSel := false.B
+        bundle.aluOpSel := 0.U
+        bundle.compOpSel := 0.U
+        bundle.lsType := 0.U
+        bundle.memWriteEnable := false.B
+        bundle.memReadEnable := false.B
+        bundle.regWriteDataSel := 0.U
+        bundle.csrRegWriteDataSel := 0.U
+        bundle.cuJumpEnable := false.B
+        bundle.cuJumpType := ControlUnit.JUMP_TYPE_JAL.U
+        bundle.cuBranchEnable := false.B
+        bundle.epcRecoverEnable := false.B
+        bundle.ecallEnable := false.B
+        bundle.inst_jal := false.B
+        bundle.inst_jalr := false.B
+    }
+
     def apply(xLen: Int = 32): ID_EX_Bundle = {
         val default = Wire(new ID_EX_Bundle(xLen))
 
-        default.pcCur := 0.U
-        default.pcNext := 0.U
-        default.rs1Data := 0.U
-        default.rs2Data := 0.U
-        default.imm := 0.U
-        default.rd := 0.U
-        default.rs1 := 0.U
-        default.rs2 := 0.U
-        default.csr := 0.U
-        default.csrData := 0.U
-        default.zimm := 0.U
-        default.epcData := 0.U
-        default.tvecData := 0.U
-        default.ecallCause := 0.U
-        default.regWriteEnable := false.B
-        default.csrRegWriteEnable := false.B
-        default.aluPortASel := false.B
-        default.aluPortBSel := false.B
-        default.aluOpSel := 0.U
-        default.compOpSel := 0.U
-        default.lsType := 0.U
-        default.memWriteEnable := false.B
-        default.memReadEnable := false.B
-        default.regWriteDataSel := 0.U
-        default.csrRegWriteDataSel := 0.U
-        default.cuJumpEnable := false.B
-        default.cuJumpType := ControlUnit.JUMP_TYPE_JAL.U
-        default.cuBranchEnable := false.B
-        default.epcRecoverEnable := false.B
-        default.ecallEnable := false.B
-        default.inst_jal := false.B
-        default.inst_jalr := false.B
+        setDefaultValues(default)
         
         default
     }

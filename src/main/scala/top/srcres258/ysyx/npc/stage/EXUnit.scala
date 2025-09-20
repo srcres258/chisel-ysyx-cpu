@@ -22,13 +22,10 @@ class EXUnit(
         val prevStage = Flipped(Decoupled(Output(new ID_EX_Bundle(xLen))))
         val nextStage = Decoupled(Output(new EX_MA_Bundle(xLen)))
 
-        val debug = Output(new DebugBundle {
-            val ecallEnable = Bool()
-        })
+        val debug = Output(new EXUnitDebugBundle(xLen))
     })
-    val ioDPI = DPIBundle.defaultIO()
 
-    val prevStageData = RegInit(ID_EX_Bundle(xLen))
+    val prevStageData = Wire(new ID_EX_Bundle(xLen))
     val nextStageData = Wire(new EX_MA_Bundle(xLen))
     val nextStagePrepared = RegInit(false.B)
 
@@ -45,11 +42,11 @@ class EXUnit(
         s_nextStage_idle -> Mux(nextStagePrepared, s_nextStage_waitReady, s_nextStage_idle),
         s_nextStage_waitReady -> Mux(io.nextStage.ready, s_nextStage_idle, s_nextStage_waitReady)
     ))
-    io.prevStage.ready := prevStageState === s_prevStage_waitReset
+    io.prevStage.ready := !nextStagePrepared
     io.nextStage.valid := nextStageState === s_nextStage_waitReady
     io.nextStage.bits := nextStageData
+    prevStageData := io.prevStage.bits
     when(io.prevStage.valid) {
-        prevStageData := io.prevStage.bits
         nextStagePrepared := true.B
     }
     when(nextStagePrepared && io.nextStage.ready) {
@@ -95,10 +92,6 @@ class EXUnit(
     pcTargetCtrl.io.ecallEnable := prevStageData.ecallEnable
     pcTargetCtrl.io.tvecData := prevStageData.tvecData
 
-    ioDPI.rs1Data := prevStageData.rs1Data
-    ioDPI.rs2Data := prevStageData.rs2Data
-    ioDPI.ecallEnable := prevStageData.ecallEnable
-
     io.debug.ecallEnable := prevStageData.ecallEnable
 
     nextStageData.pcCur := prevStageData.pcCur
@@ -126,4 +119,18 @@ class EXUnit(
     nextStageData.ecallEnable := prevStageData.ecallEnable
     nextStageData.inst_jal := prevStageData.inst_jal
     nextStageData.inst_jalr := prevStageData.inst_jalr
+}
+
+class EXUnitDebugBundle(val xLen: Int = 32) extends DebugBundle {
+    val ecallEnable = Bool()
+}
+
+object EXUnitDebugBundle {
+    def apply(xLen: Int = 32): EXUnitDebugBundle = {
+        val default = Wire(new EXUnitDebugBundle(xLen))
+
+        default.ecallEnable := false.B
+
+        default
+    }
 }

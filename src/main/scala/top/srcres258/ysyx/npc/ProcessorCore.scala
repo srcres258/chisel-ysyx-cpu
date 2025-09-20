@@ -11,6 +11,7 @@ import top.srcres258.ysyx.npc.dpi.DPIAdapter
 import top.srcres258.ysyx.npc.dpi.DPIBundle
 import top.srcres258.ysyx.npc.regfile.GeneralPurposeRegisterFile
 import top.srcres258.ysyx.npc.regfile.ControlAndStatusRegisterFile
+import top.srcres258.ysyx.npc.util.DecoupledIOConnect
 
 /**
   * RV32I 单周期处理器核心
@@ -77,33 +78,25 @@ class ProcessorCore(
     val csrFile = Module(new ControlAndStatusRegisterFile)
 
     val ifu = Module(new IFUnit)
-    val ifuInputValid = RegInit(false.B)
-    // ifu.io.pc := 0.U
-    // ifu.io.instData := 0.U
     ifu.io.input.bits.pc := pc_r
     ifu.io.input.bits.instData := io.instData
-    when(!executing) {
-        ifuInputValid := true.B
-
-        when(ifu.io.input.ready) {
-            executing := true.B
-            ifuInputValid := false.B
-        }
+    when(!executing && ifu.io.input.ready) {
+        executing := true.B
     }
-    ifu.io.input.valid := ifuInputValid
+    ifu.io.input.valid := !executing
 
     val idu = Module(new IDUnit)
-    idu.io.prevStage <> ifu.io.nextStage
+    DecoupledIOConnect(ifu.io.nextStage, idu.io.prevStage, new DecoupledIOConnect.Pipeline(IF_ID_Bundle()))
     idu.io.gprReadPort <> gprFile.io.readPort
     idu.io.csrReadPort1 <> csrFile.io.readPort1
     idu.io.csrReadPort2 <> csrFile.io.readPort2
     idu.io.csrReadPort3 <> csrFile.io.readPort3
 
     val exu = Module(new EXUnit)
-    exu.io.prevStage <> idu.io.nextStage
+    DecoupledIOConnect(idu.io.nextStage, exu.io.prevStage, new DecoupledIOConnect.Pipeline(ID_EX_Bundle()))
 
     val mau = Module(new MAUnit)
-    mau.io.prevStage <> exu.io.nextStage
+    DecoupledIOConnect(exu.io.nextStage, mau.io.prevStage, new DecoupledIOConnect.Pipeline(EX_MA_Bundle()))
     mau.io.readData := io.readData
     io.readEnable := mau.io.readEnable
     io.writeEnable := mau.io.writeEnable
@@ -112,22 +105,18 @@ class ProcessorCore(
     io.address := mau.io.address
 
     val wbu = Module(new WBUnit)
-    wbu.io.prevStage <> mau.io.nextStage
+    DecoupledIOConnect(mau.io.nextStage, wbu.io.prevStage, new DecoupledIOConnect.Pipeline(MA_WB_Bundle()))
     wbu.io.gprWritePort <> gprFile.io.writePort
     csrFile.io.writePort1 <> wbu.io.csrWritePort1
     csrFile.io.writePort2 <> wbu.io.csrWritePort2
 
     val upcu = Module(new UPCUnit)
-    val upcuPCOutputReady = RegInit(false.B)
-    upcu.io.prevStage <> wbu.io.nextStage
-    when(upcu.io.pcOutput.valid) {
+    DecoupledIOConnect(wbu.io.nextStage, upcu.io.prevStage, new DecoupledIOConnect.Pipeline(WB_UPC_Bundle()))
+    when(upcu.io.pcOutput.fire) {
         pc_r := upcu.io.pcOutput.bits
-        upcuPCOutputReady := true.B
         executing := false.B
-    }.otherwise {
-        upcuPCOutputReady := false.B
     }
-    upcu.io.pcOutput.ready := upcuPCOutputReady
+    upcu.io.pcOutput.ready := executing
 
     if (enableDPI) {
         val dpiBundleTemp = Wire(new DPIBundle)
@@ -146,44 +135,38 @@ class ProcessorCore(
         dpiBundleTemp.csr_mcause := csrFile.io.registers(ControlAndStatusRegisterFile.CSR_MCAUSE)
         dpiBundleTemp.csr_mtval := csrFile.io.registers(ControlAndStatusRegisterFile.CSR_MTVAL)
 
-        val inst_jal_dpi_r = RegInit(false.B)
-        val inst_jalr_dpi_r = RegInit(false.B)
-        val memWriteEnable_dpi_r = RegInit(false.B)
-        val memReadEnable_dpi_r = RegInit(false.B)
-        val ecallEnable_dpi_r = RegInit(false.B)
-        when(mau.io.prevStage.ready) {
-            inst_jal_dpi_r := mau.ioDPI.inst_jal
-            inst_jalr_dpi_r := mau.ioDPI.inst_jalr
-            memWriteEnable_dpi_r := mau.io.debug.memWriteEnable
-            memReadEnable_dpi_r := mau.io.debug.memReadEnable
+        val idu_dpi = Wire(new IDUnitDebugBundle())
+        val exu_dpi = Wire(new EXUnitDebugBundle())
+        val mau_dpi = Wire(new MAUnitDebugBundle())
+        when(idu.io.nextStage.valid) {
+            idu_dpi <> idu.io.debug
+        }.otherwise {
+            idu_dpi <> IDUnitDebugBundle()
         }
-        when(mau.io.nextStage.ready) {
-            inst_jal_dpi_r := false.B
-            inst_jalr_dpi_r := false.B
-            memWriteEnable_dpi_r := false.B
-            memReadEnable_dpi_r := false.B
+        when(exu.io.nextStage.valid) {
+            exu_dpi <> exu.io.debug
+        }.otherwise {
+            exu_dpi <> EXUnitDebugBundle()
         }
-        when(exu.io.prevStage.ready) {
-            ecallEnable_dpi_r := exu.io.debug.ecallEnable
+        when(mau.io.nextStage.valid) {
+            mau_dpi <> mau.io.debug
+        }.otherwise {
+            mau_dpi <> MAUnitDebugBundle()
         }
-        when(exu.io.nextStage.ready) {
-            ecallEnable_dpi_r := false.B
-        }
-        dpiBundleTemp.inst_jal := inst_jal_dpi_r
-        dpiBundleTemp.inst_jalr := inst_jalr_dpi_r
-        // TODO: Provide with debug data from each stage unit.
-        dpiBundleTemp.rs1 := 0.U
-        dpiBundleTemp.rs2 := 0.U
-        dpiBundleTemp.rd := 0.U
-        dpiBundleTemp.imm := 0.U
-        dpiBundleTemp.rs1Data := 0.U
-        dpiBundleTemp.rs2Data := 0.U
-        dpiBundleTemp.memWriteEnable := memWriteEnable_dpi_r
-        dpiBundleTemp.memReadEnable := memReadEnable_dpi_r
-        dpiBundleTemp.ecallEnable := ecallEnable_dpi_r
+        dpiBundleTemp.inst_jal := idu_dpi.inst_jal
+        dpiBundleTemp.inst_jalr := idu_dpi.inst_jalr
+        dpiBundleTemp.rs1 := idu_dpi.rs1
+        dpiBundleTemp.rs2 := idu_dpi.rs2
+        dpiBundleTemp.rd := idu_dpi.rd
+        dpiBundleTemp.imm := idu_dpi.imm
+        dpiBundleTemp.rs1Data := idu_dpi.rs1Data
+        dpiBundleTemp.rs2Data := idu_dpi.rs2Data
+        dpiBundleTemp.memWriteEnable := mau_dpi.memWriteEnable
+        dpiBundleTemp.memReadEnable := mau_dpi.memReadEnable
+        dpiBundleTemp.ecallEnable := exu_dpi.ecallEnable
 
         dpiBundleTemp.executing := executing
-        dpiBundleTemp.ifuInputValid := ifuInputValid
+        dpiBundleTemp.ifuInputValid := !executing
         dpiBundleTemp.if_nextStage_valid := ifu.io.nextStage.valid
         dpiBundleTemp.id_nextStage_valid := idu.io.nextStage.valid
         dpiBundleTemp.ex_nextStage_valid := exu.io.nextStage.valid

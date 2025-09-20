@@ -5,6 +5,7 @@ import chisel3.util._
 
 import top.srcres258.ysyx.npc.ControlUnit
 import top.srcres258.ysyx.npc.ProcessorCore
+import os.group.set
 
 /**
   * 从 MA 阶段到 WB 阶段所需流转的数据。
@@ -39,29 +40,33 @@ class MA_WB_Bundle(
 }
 
 object MA_WB_Bundle {
+    def setDefaultValues(bundle: MA_WB_Bundle): Unit = {
+        bundle.pcCur := 0.U
+        bundle.pcNext := 0.U
+        bundle.pcTarget := ProcessorCore.PC_INITIAL_VAL
+        bundle.memReadData := 0.U
+        bundle.aluOutput := 0.U
+        bundle.compBranchEnable := false.B
+        bundle.rs1Data := 0.U
+        bundle.imm := 0.U
+        bundle.rd := 0.U
+        bundle.rs1 := 0.U
+        bundle.rs2 := 0.U
+        bundle.csr := 0.U
+        bundle.csrData := 0.U
+        bundle.zimm := 0.U
+        bundle.ecallCause := 0.U
+        bundle.regWriteEnable := false.B
+        bundle.csrRegWriteEnable := false.B
+        bundle.regWriteDataSel := 0.U
+        bundle.csrRegWriteDataSel := 0.U
+        bundle.ecallEnable := false.B
+    }
+
     def apply(xLen: Int = 32): MA_WB_Bundle = {
         val default = Wire(new MA_WB_Bundle(xLen))
 
-        default.pcCur := 0.U
-        default.pcNext := 0.U
-        default.pcTarget := ProcessorCore.PC_INITIAL_VAL
-        default.memReadData := 0.U
-        default.aluOutput := 0.U
-        default.compBranchEnable := false.B
-        default.rs1Data := 0.U
-        default.imm := 0.U
-        default.rd := 0.U
-        default.rs1 := 0.U
-        default.rs2 := 0.U
-        default.csr := 0.U
-        default.csrData := 0.U
-        default.zimm := 0.U
-        default.ecallCause := 0.U
-        default.regWriteEnable := false.B
-        default.csrRegWriteEnable := false.B
-        default.regWriteDataSel := 0.U
-        default.csrRegWriteDataSel := 0.U
-        default.ecallEnable := false.B
+        setDefaultValues(default)
         
         default
     }

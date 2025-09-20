@@ -25,7 +25,7 @@ class WBUnit(
         val nextStage = Decoupled(Output(new WB_UPC_Bundle(xLen)))
     })
 
-    val prevStageData = RegInit(MA_WB_Bundle(xLen))
+    val prevStageData = Wire(new MA_WB_Bundle(xLen))
     val nextStageData = Wire(new WB_UPC_Bundle(xLen))
     val nextStagePrepared = RegInit(false.B)
 
@@ -42,11 +42,11 @@ class WBUnit(
         s_nextStage_idle -> Mux(nextStagePrepared, s_nextStage_waitReady, s_nextStage_idle),
         s_nextStage_waitReady -> Mux(io.nextStage.ready, s_nextStage_idle, s_nextStage_waitReady)
     ))
-    io.prevStage.ready := prevStageState === s_prevStage_waitReset
+    io.prevStage.ready := !nextStagePrepared
     io.nextStage.valid := nextStageState === s_nextStage_waitReady
     io.nextStage.bits := nextStageData
+    prevStageData := io.prevStage.bits
     when(io.prevStage.valid) {
-        prevStageData := io.prevStage.bits
         nextStagePrepared := true.B
     }
     when(nextStagePrepared && io.nextStage.ready) {

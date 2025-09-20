@@ -18,12 +18,16 @@ class IF_ID_Bundle(
 }
 
 object IF_ID_Bundle {
+    private def setDefaultValues(bundle: IF_ID_Bundle): Unit = {
+        bundle.pcCur := 0.U
+        bundle.pcNext := 0.U
+        bundle.inst := 0.U
+    }
+
     def apply(xLen: Int = 32): IF_ID_Bundle = {
         val default = Wire(new IF_ID_Bundle(xLen))
 
-        default.pcCur := 0.U
-        default.pcNext := 0.U
-        default.inst := 0.U
+        setDefaultValues(default)
         
         default
     }

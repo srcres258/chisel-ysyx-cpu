@@ -20,7 +20,8 @@ class IFUnit(
         val nextStage = Decoupled(Output(new IF_ID_Bundle(xLen)))
     });
 
-    val inputData = RegInit(IFUnit.InputBundle(xLen))
+    // val inputData = RegInit(IFUnit.InputBundle(xLen))
+    val inputData = Wire(new IFUnit.InputBundle(xLen))
     val nextStageData = Wire(new IF_ID_Bundle(xLen))
     val nextStagePrepared = RegInit(false.B)
 
@@ -34,13 +35,13 @@ class IFUnit(
     io.nextStage.valid := nextStageState === s_nextStage_waitReady
     io.nextStage.bits := nextStageData
 
+    inputData := io.input.bits
+    io.input.ready := !nextStagePrepared
     when(io.input.valid) {
-        inputData := io.input.bits
         nextStagePrepared := true.B
-        io.input.ready := true.B
-    }.otherwise {
+    }
+    when(nextStagePrepared && io.nextStage.ready) {
         nextStagePrepared := false.B
-        io.input.ready := false.B
     }
 
     nextStageData.pcCur := inputData.pc

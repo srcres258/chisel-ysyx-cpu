@@ -20,7 +20,7 @@ class UPCUnit(
 
     val pcOutputValid = RegInit(false.B)
 
-    val prevStageData = RegInit(WB_UPC_Bundle(xLen))
+    val prevStageData = Wire(new WB_UPC_Bundle(xLen))
 
     val s_prevStage_idle :: s_prevStage_waitReset :: Nil = Enum(2)
     val s_pcOutput_idle :: s_pcOutput_waitReady :: Nil = Enum(2)
@@ -30,9 +30,9 @@ class UPCUnit(
         s_prevStage_idle -> Mux(io.prevStage.valid, s_prevStage_waitReset, s_prevStage_idle),
         s_prevStage_waitReset -> Mux(!io.prevStage.valid, s_prevStage_idle, s_prevStage_waitReset)
     ))
-    io.prevStage.ready := prevStageState === s_prevStage_waitReset
+    io.prevStage.ready := !pcOutputValid
+    prevStageData := io.prevStage.bits
     when(io.prevStage.valid) {
-        prevStageData := io.prevStage.bits
         pcOutputValid := true.B
     }
     when(pcOutputValid && io.pcOutput.ready) {

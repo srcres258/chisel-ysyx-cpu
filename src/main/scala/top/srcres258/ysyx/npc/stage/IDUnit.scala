@@ -31,13 +31,10 @@ class IDUnit(
         val prevStage = Flipped(Decoupled(Output(new IF_ID_Bundle(xLen))))
         val nextStage = Decoupled(Output(new ID_EX_Bundle(xLen)))
 
-        val debug = Output(new DebugBundle {
-            val inst = UInt(xLen.W)
-        })
+        val debug = Output(new IDUnitDebugBundle(xLen))
     })
-    val ioDPI = DPIBundle.defaultIO()
 
-    val prevStageData = RegInit(IF_ID_Bundle(xLen))
+    val prevStageData = Wire(new IF_ID_Bundle(xLen))
     val nextStageData = Wire(new ID_EX_Bundle(xLen))
     val nextStagePrepared = RegInit(false.B)
 
@@ -54,11 +51,11 @@ class IDUnit(
         s_nextStage_idle -> Mux(nextStagePrepared, s_nextStage_waitReady, s_nextStage_idle),
         s_nextStage_waitReady -> Mux(io.nextStage.ready, s_nextStage_idle, s_nextStage_waitReady)
     ))
-    io.prevStage.ready := prevStageState === s_prevStage_waitReset
+    io.prevStage.ready := !nextStagePrepared
     io.nextStage.valid := nextStageState === s_nextStage_waitReady
     io.nextStage.bits := nextStageData
+    prevStageData := io.prevStage.bits
     when(io.prevStage.valid) {
-        prevStageData := io.prevStage.bits
         nextStagePrepared := true.B
     }
     when(nextStagePrepared && io.nextStage.ready) {
@@ -135,12 +132,15 @@ class IDUnit(
     regWriteDataSel := cu.io.regWriteDataSel
     csrRegWriteDataSel := cu.io.csrRegWriteDataSel
 
-    ioDPI.rs1 := rs1
-    ioDPI.rs2 := rs2
-    ioDPI.rd := rd
-    ioDPI.imm := imm
-
+    io.debug.rs1 := rs1
+    io.debug.rs2 := rs2
+    io.debug.rd := rd
+    io.debug.imm := imm
+    io.debug.rs1Data := rs1Data
+    io.debug.rs2Data := rs2Data
     io.debug.inst := prevStageData.inst
+    io.debug.inst_jal := cu.io.inst_jal
+    io.debug.inst_jalr := cu.io.inst_jalr
 
     nextStageData.pcCur := prevStageData.pcCur
     nextStageData.pcNext := prevStageData.pcNext
@@ -174,4 +174,34 @@ class IDUnit(
     nextStageData.ecallEnable := cu.io.ecallEnable
     nextStageData.inst_jal := cu.io.inst_jal
     nextStageData.inst_jalr := cu.io.inst_jalr
+}
+
+class IDUnitDebugBundle(val xLen: Int = 32) extends DebugBundle {
+    val rs1 = UInt(5.W)
+    val rs2 = UInt(5.W)
+    val rd = UInt(5.W)
+    val imm = UInt(xLen.W)
+    val rs1Data = UInt(xLen.W)
+    val rs2Data = UInt(xLen.W)
+    val inst = UInt(xLen.W)
+    val inst_jal = Bool()
+    val inst_jalr = Bool()
+}
+
+object IDUnitDebugBundle {
+    def apply(xLen: Int = 32): IDUnitDebugBundle = {
+        val default = Wire(new IDUnitDebugBundle(xLen))
+
+        default.rs1 := 0.U
+        default.rs2 := 0.U
+        default.rd := 0.U
+        default.imm := 0.U
+        default.rs1Data := 0.U
+        default.rs2Data := 0.U
+        default.inst := 0.U
+        default.inst_jal := false.B
+        default.inst_jalr := false.B
+
+        default
+    }
 }

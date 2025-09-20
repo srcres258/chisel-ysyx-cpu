@@ -17,11 +17,15 @@ class WB_UPC_Bundle(
 }
 
 object WB_UPC_Bundle {
+    def setDefaultValues(bundle: WB_UPC_Bundle): Unit = {
+        bundle.pcCur := 0.U
+        bundle.pcTarget := 0.U
+    }
+
     def apply(xLen: Int = 32): WB_UPC_Bundle = {
         val default = Wire(new WB_UPC_Bundle(xLen))
 
-        default.pcCur := 0.U
-        default.pcTarget := 0.U
+        setDefaultValues(default)
         
         default
     }
