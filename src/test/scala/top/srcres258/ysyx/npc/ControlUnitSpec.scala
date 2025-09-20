@@ -23,7 +23,7 @@ class ControlUnitSpec extends AnyFunSpec with ChiselSim {
                 // inputs
                 val opCode = top.io.opCode
                 val funct3 = top.io.funct3
-                val funct7Bit5 = top.io.funct7Bit5
+                val funct7Bit5 = top.io.funct7(5)
 
                 opCode.poke(0b0010111)
                 funct3.poke(0b000)
