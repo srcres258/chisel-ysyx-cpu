@@ -69,35 +69,12 @@ class ProcessorCore(
     val pc_r = RegInit(ProcessorCore.PC_INITIAL_VAL)
     io.pc := pc_r
 
-    // val if_id_r = RegInit(IF_ID_Bundle())
-    // val id_ex_r = RegInit(ID_EX_Bundle())
-    // val ex_ma_r = RegInit(EX_MA_Bundle())
-    // val ma_wb_r = RegInit(MA_WB_Bundle())
-    // val wb_upc_r = RegInit(WB_UPC_Bundle())
-
-    // val stageCtrl = Module(new StageController)
-    // val stage = Wire(UInt(StageController.STAGE_LEN.W))
-    // stage := stageCtrl.io.stage
-
     /* 
     寄存器堆: ID 阶段读取数据, WB 阶段写入数据, 二者理论上不会发生读写冲突.
      */
     val gprFile = Module(new GeneralPurposeRegisterFile)
-    // gprFile.io.writePort.writeEnable := false.B
-    // gprFile.io.writePort.writeData := 0.U
-    // gprFile.io.writePort.writeAddress := 0.U
-    // gprFile.io.readPort.readAddress1 := 0.U
-    // gprFile.io.readPort.readAddress2 := 0.U
 
     val csrFile = Module(new ControlAndStatusRegisterFile)
-    // for (writePort <- List(csrFile.io.writePort1, csrFile.io.writePort2)) {
-    //     writePort.writeEnable := false.B
-    //     writePort.writeData := 0.U
-    //     writePort.writeAddress := 0.U
-    // }
-    // for (readPort <- List(csrFile.io.readPort1, csrFile.io.readPort2, csrFile.io.readPort3)) {
-    //     readPort.readAddress := 0.U
-    // }
 
     val ifu = Module(new IFUnit)
     val ifuInputValid = RegInit(false.B)
@@ -116,12 +93,6 @@ class ProcessorCore(
     ifu.io.input.valid := ifuInputValid
 
     val idu = Module(new IDUnit)
-    // idu.io.gprReadPort.readData1 := 0.U
-    // idu.io.gprReadPort.readData2 := 0.U
-    // for (csrReadPort <- List(idu.io.csrReadPort1, idu.io.csrReadPort2, idu.io.csrReadPort3)) {
-    //     csrReadPort.readData := 0.U
-    // }
-    // idu.io.prevStage <> IF_ID_Bundle()
     idu.io.prevStage <> ifu.io.nextStage
     idu.io.gprReadPort <> gprFile.io.readPort
     idu.io.csrReadPort1 <> csrFile.io.readPort1
@@ -129,13 +100,9 @@ class ProcessorCore(
     idu.io.csrReadPort3 <> csrFile.io.readPort3
 
     val exu = Module(new EXUnit)
-    // exu.io.pc := 0.U
-    // exu.io.prevStage <> ID_EX_Bundle()
     exu.io.prevStage <> idu.io.nextStage
 
     val mau = Module(new MAUnit)
-    // mau.io.readData := 0.U
-    // mau.io.prevStage <> EX_MA_Bundle()
     mau.io.prevStage <> exu.io.nextStage
     mau.io.readData := io.readData
     io.readEnable := mau.io.readEnable
@@ -145,8 +112,6 @@ class ProcessorCore(
     io.address := mau.io.address
 
     val wbu = Module(new WBUnit)
-    // wbu.io.pc := 0.U
-    // wbu.io.prevStage <> MA_WB_Bundle()
     wbu.io.prevStage <> mau.io.nextStage
     wbu.io.gprWritePort <> gprFile.io.writePort
     csrFile.io.writePort1 <> wbu.io.csrWritePort1
@@ -154,7 +119,6 @@ class ProcessorCore(
 
     val upcu = Module(new UPCUnit)
     val upcuPCOutputReady = RegInit(false.B)
-    // upcu.io.prevStage <> WB_UPC_Bundle()
     upcu.io.prevStage <> wbu.io.nextStage
     when(upcu.io.pcOutput.valid) {
         pc_r := upcu.io.pcOutput.bits
@@ -233,77 +197,6 @@ class ProcessorCore(
         val dpi = Module(new DPIAdapter)
         dpi.io <> dpiBundleTemp
     }
-
-    // io.readEnable := false.B
-    // io.writeEnable := false.B
-    // io.writeData := 0.U
-    // io.dataStrobe := 0.U
-    // io.address := 0.U
-    // when(stage === StageController.STAGE_IF.U(StageController.STAGE_LEN.W)) {
-    //     // IF 阶段
-    //     ifu.io.pc := pc_r
-    //     ifu.io.instData := io.instData
-
-    //     if_id_r <> ifu.io.nextStage
-    // }.elsewhen(stage === StageController.STAGE_ID.U(StageController.STAGE_LEN.W)) {
-    //     // ID 阶段
-    //     idu.io.gprReadPort <> gprFile.io.readPort
-    //     idu.io.csrReadPort1 <> csrFile.io.readPort1
-    //     idu.io.csrReadPort2 <> csrFile.io.readPort2
-    //     idu.io.csrReadPort3 <> csrFile.io.readPort3
-    //     idu.io.prevStage <> if_id_r
-
-    //     id_ex_r <> idu.io.nextStage
-
-    //     ioDPI.rs1 := idu.ioDPI.rs1
-    //     ioDPI.rs2 := idu.ioDPI.rs2
-    //     ioDPI.rd := idu.ioDPI.rd
-    //     ioDPI.imm := idu.ioDPI.imm
-    // }.elsewhen(stage === StageController.STAGE_EX.U(StageController.STAGE_LEN.W)) {
-    //     // EX 阶段
-    //     exu.io.pc := pc_r
-    //     exu.io.prevStage <> id_ex_r
-
-    //     ex_ma_r <> exu.io.nextStage
-
-    //     ioDPI.rs1 := exu.io.nextStage.rs1
-    //     ioDPI.rs2 := exu.io.nextStage.rs2
-    //     ioDPI.rd := exu.io.nextStage.rd
-    //     ioDPI.imm := exu.io.nextStage.imm
-    //     ioDPI.rs1Data := exu.ioDPI.rs1Data
-    //     ioDPI.rs2Data := exu.ioDPI.rs2Data
-    // }.elsewhen(stage === StageController.STAGE_MA.U(StageController.STAGE_LEN.W)) {
-    //     // MA 阶段
-    //     mau.io.readData := io.readData
-    //     mau.io.prevStage <> ex_ma_r
-
-    //     io.readEnable := mau.io.readEnable
-    //     io.writeEnable := mau.io.writeEnable
-    //     io.writeData := mau.io.writeData
-    //     io.dataStrobe := mau.io.dataStrobe
-    //     io.address := mau.io.address
-    //     ma_wb_r <> mau.io.nextStage
-
-    //     ioDPI.rs1 := mau.io.nextStage.rs1
-    //     ioDPI.rs2 := mau.io.nextStage.rs2
-    //     ioDPI.rd := mau.io.nextStage.rd
-    //     ioDPI.imm := mau.io.nextStage.imm
-    //     ioDPI.rs1Data := mau.io.nextStage.rs1Data
-    // }.elsewhen(stage === StageController.STAGE_WB.U(StageController.STAGE_LEN.W)) {
-    //     // WB 阶段
-    //     wbu.io.pc := pc_r
-    //     wbu.io.gprWritePort <> gprFile.io.writePort
-    //     wbu.io.prevStage <> ma_wb_r
-
-    //     csrFile.io.writePort1 <> wbu.io.csrWritePort1
-    //     csrFile.io.writePort2 <> wbu.io.csrWritePort2
-    //     wb_upc_r <> wbu.io.nextStage
-    // }.elsewhen(stage === StageController.STAGE_UPC.U(StageController.STAGE_LEN.W)) {
-    //     // UPC 阶段
-    //     upcu.io.prevStage <> wb_upc_r
-
-    //     pc_r := upcu.io.pc
-    // }
 }
 
 object ProcessorCore extends App {
