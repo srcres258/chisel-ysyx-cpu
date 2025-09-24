@@ -7,11 +7,13 @@ import chisel3.stage.ChiselGeneratorAnnotation
 import firrtl.AnnotationSeq
 
 import top.srcres258.ysyx.npc.stage._
-import top.srcres258.ysyx.npc.dpi.DPIAdapter
-import top.srcres258.ysyx.npc.dpi.DPIBundle
+import top.srcres258.ysyx.npc.dpi.GeneralDPIAdapter
+import top.srcres258.ysyx.npc.dpi.GeneralDPIBundle
 import top.srcres258.ysyx.npc.regfile.GeneralPurposeRegisterFile
 import top.srcres258.ysyx.npc.regfile.ControlAndStatusRegisterFile
 import top.srcres258.ysyx.npc.util.DecoupledIOConnect
+import top.srcres258.ysyx.npc.dpi.impl._
+import top.srcres258.ysyx.npc.bus.AXI4Lite
 
 /**
   * RV32I 单周期处理器核心
@@ -23,95 +25,77 @@ class ProcessorCore(
       * 网表综合时应将该选项置为 false 以省去不必要信号元件,
       * 获得最真实的硬件级仿真结果.
       */
-    enableDPI: Boolean
-) extends Module {
+    enableDPI: Boolean,
     /**
-      * 目前的 IO 方式采用哈佛架构（指令的存取与程序数据的存取分离）
-      * 但是实际仿真时也可适用于冯诺依曼架构（将指令与程序数据存在一块即可）
+      * 处理器字长. 32 位 RISC-V ISA 下默认为 32.
       */
-    val io = IO(new Bundle {
-        /**
-          * 输出：程序计数器地址。处理器将会从这个主存地址取指令
-          */
-        val pc = Output(UInt(32.W))
-        /**
-          * 输入：指令数据
-          */
-        val instData = Input(UInt(32.W))
-
-        /**
-          * 输出：读入程序数据，读使能
-          */
-        val readEnable = Output(Bool())
-        /**
-          * 输入：读入程序数据
-          */
-        val readData = Input(UInt(32.W))
-        /**
-          * 输出：写出程序数据，写使能
-          */
-        val writeEnable = Output(Bool())
-        /**
-          * 输出：写出程序数据
-          */
-        val writeData = Output(UInt(32.W))
-        /**
-          * 输出：读入/写出程序数据，字掩码
-          */
-        val dataStrobe = Output(UInt(LoadAndStoreUnit.DATA_STROBE_LEN.W))
-        /**
-          * 输出：读入/写出程序数据，地址
-          */
-        val address = Output(UInt(32.W))
-    })
-
+    val xLen: Int = 32
+) extends Module {
     val executing = RegInit(false.B)
 
     val pc_r = RegInit(ProcessorCore.PC_INITIAL_VAL)
-    io.pc := pc_r
 
     /* 
     寄存器堆: ID 阶段读取数据, WB 阶段写入数据, 二者理论上不会发生读写冲突.
      */
-    val gprFile = Module(new GeneralPurposeRegisterFile)
+    val gprFile = Module(new GeneralPurposeRegisterFile(xLen))
+    val csrFile = Module(new ControlAndStatusRegisterFile(xLen))
+    GeneralPurposeRegisterFile.defaultValuesForMaster(gprFile)
+    ControlAndStatusRegisterFile.defaultValuesForMaster(csrFile)
 
-    val csrFile = Module(new ControlAndStatusRegisterFile)
+    val physicalRAM = Module(new PhysicalRAM(xLen))
+    AXI4Lite.defaultValuesForMaster(physicalRAM.io.bus)
 
-    val ifu = Module(new IFUnit)
-    ifu.io.input.bits.pc := pc_r
-    ifu.io.input.bits.instData := io.instData
-    when(!executing && ifu.io.input.ready) {
+    val ifu = Module(new IFUnit(xLen))
+    ifu.io.executionInfo.bits.pc := pc_r
+    when(!executing && ifu.io.nextStage.fire) {
         executing := true.B
     }
-    ifu.io.input.valid := !executing
+    ifu.io.executionInfo.valid := !executing
+    when(ifu.io.working) {
+        ifu.io.ramBus <> physicalRAM.io.bus
+    }.otherwise {
+        AXI4Lite.defaultValuesForSlave(ifu.io.ramBus)
+    }
 
-    val idu = Module(new IDUnit)
-    DecoupledIOConnect(ifu.io.nextStage, idu.io.prevStage, new DecoupledIOConnect.Pipeline(IF_ID_Bundle()))
-    idu.io.gprReadPort <> gprFile.io.readPort
-    idu.io.csrReadPort1 <> csrFile.io.readPort1
-    idu.io.csrReadPort2 <> csrFile.io.readPort2
-    idu.io.csrReadPort3 <> csrFile.io.readPort3
+    val idu = Module(new IDUnit(xLen))
+    DecoupledIOConnect(ifu.io.nextStage, idu.io.prevStage, DecoupledIOConnect.Pipeline)
+    when(idu.io.working) {
+        idu.io.gprReadPort <> gprFile.io.readPort
+        idu.io.csrReadPort1 <> csrFile.io.readPort1
+        idu.io.csrReadPort2 <> csrFile.io.readPort2
+        idu.io.csrReadPort3 <> csrFile.io.readPort3
+    }.otherwise {
+        GeneralPurposeRegisterFile.ReadPort.defaultValuesForSlave(idu.io.gprReadPort)
+        ControlAndStatusRegisterFile.ReadPort.defaultValuesForSlave(idu.io.csrReadPort1)
+        ControlAndStatusRegisterFile.ReadPort.defaultValuesForSlave(idu.io.csrReadPort2)
+        ControlAndStatusRegisterFile.ReadPort.defaultValuesForSlave(idu.io.csrReadPort3)
+    }
 
-    val exu = Module(new EXUnit)
-    DecoupledIOConnect(idu.io.nextStage, exu.io.prevStage, new DecoupledIOConnect.Pipeline(ID_EX_Bundle()))
+    val exu = Module(new EXUnit(xLen))
+    DecoupledIOConnect(idu.io.nextStage, exu.io.prevStage, DecoupledIOConnect.Pipeline)
 
-    val mau = Module(new MAUnit)
-    DecoupledIOConnect(exu.io.nextStage, mau.io.prevStage, new DecoupledIOConnect.Pipeline(EX_MA_Bundle()))
-    mau.io.readData := io.readData
-    io.readEnable := mau.io.readEnable
-    io.writeEnable := mau.io.writeEnable
-    io.writeData := mau.io.writeData
-    io.dataStrobe := mau.io.dataStrobe
-    io.address := mau.io.address
+    val mau = Module(new MAUnit(xLen))
+    DecoupledIOConnect(exu.io.nextStage, mau.io.prevStage, DecoupledIOConnect.Pipeline)
+    when(mau.io.working) {
+        mau.io.ramBus <> physicalRAM.io.bus
+    }.otherwise {
+        AXI4Lite.defaultValuesForSlave(mau.io.ramBus)
+    }
 
-    val wbu = Module(new WBUnit)
-    DecoupledIOConnect(mau.io.nextStage, wbu.io.prevStage, new DecoupledIOConnect.Pipeline(MA_WB_Bundle()))
-    wbu.io.gprWritePort <> gprFile.io.writePort
-    csrFile.io.writePort1 <> wbu.io.csrWritePort1
-    csrFile.io.writePort2 <> wbu.io.csrWritePort2
+    val wbu = Module(new WBUnit(xLen))
+    DecoupledIOConnect(mau.io.nextStage, wbu.io.prevStage, DecoupledIOConnect.Pipeline)
+    when(wbu.io.working) {
+        gprFile.io.writePort <> wbu.io.gprWritePort
+        csrFile.io.writePort1 <> wbu.io.csrWritePort1
+        csrFile.io.writePort2 <> wbu.io.csrWritePort2
+    }.otherwise {
+        // Nothing to do here. 因为 GPR 和 CSR 两个寄存器文件的写端都没有输出,
+        // 所以 WB 单元的写端没有接收信号线, 即没有缺省值需要赋.
+    }
 
-    val upcu = Module(new UPCUnit)
-    DecoupledIOConnect(wbu.io.nextStage, upcu.io.prevStage, new DecoupledIOConnect.Pipeline(WB_UPC_Bundle()))
+    val upcu = Module(new UPCUnit(xLen))
+    DecoupledIOConnect(wbu.io.nextStage, upcu.io.prevStage, DecoupledIOConnect.Pipeline)
     when(upcu.io.pcOutput.fire) {
         pc_r := upcu.io.pcOutput.bits
         executing := false.B
@@ -119,66 +103,34 @@ class ProcessorCore(
     upcu.io.pcOutput.ready := executing
 
     if (enableDPI) {
-        val dpiBundleTemp = Wire(new DPIBundle)
+        val generalDPI = Wire(new GeneralDPIBundle(xLen))
+
+        generalDPI.core.pc := pc_r
         /* 
         RV32I 中，ebreak 指令的机器码是 0x00100073
         目前我们硬编码该指令为处理器仿真结束指令，遇到该指令时将 halt 输出置高电平，
         外部 BlackBox 检测到到该电平上升沿后，自动调用 DPI-C 接口终止仿真。
-        */
-        dpiBundleTemp.halt := idu.io.debug.inst === "h00100073".U(32.W)
-        for (i <- 0 until dpiBundleTemp.gprs.length) {
-            dpiBundleTemp.gprs(i) := gprFile.io.registers(i)
-        }
-        dpiBundleTemp.csr_mstatus := csrFile.io.registers(ControlAndStatusRegisterFile.CSR_MSTATUS)
-        dpiBundleTemp.csr_mtvec := csrFile.io.registers(ControlAndStatusRegisterFile.CSR_MTVEC)
-        dpiBundleTemp.csr_mepc := csrFile.io.registers(ControlAndStatusRegisterFile.CSR_MEPC)
-        dpiBundleTemp.csr_mcause := csrFile.io.registers(ControlAndStatusRegisterFile.CSR_MCAUSE)
-        dpiBundleTemp.csr_mtval := csrFile.io.registers(ControlAndStatusRegisterFile.CSR_MTVAL)
+         */
+        generalDPI.core.halt := idu.io.dpi.inst === "h00100073".U(32.W)
+        generalDPI.core.executing := executing
+        generalDPI.core.ifuInputValid := !executing
 
-        val idu_dpi = Wire(new IDUnitDebugBundle())
-        val exu_dpi = Wire(new EXUnitDebugBundle())
-        val mau_dpi = Wire(new MAUnitDebugBundle())
-        when(idu.io.nextStage.valid) {
-            idu_dpi <> idu.io.debug
-        }.otherwise {
-            idu_dpi <> IDUnitDebugBundle()
-        }
-        when(exu.io.nextStage.valid) {
-            exu_dpi <> exu.io.debug
-        }.otherwise {
-            exu_dpi <> EXUnitDebugBundle()
-        }
-        when(mau.io.nextStage.valid) {
-            mau_dpi <> mau.io.debug
-        }.otherwise {
-            mau_dpi <> MAUnitDebugBundle()
-        }
-        dpiBundleTemp.inst_jal := idu_dpi.inst_jal
-        dpiBundleTemp.inst_jalr := idu_dpi.inst_jalr
-        dpiBundleTemp.rs1 := idu_dpi.rs1
-        dpiBundleTemp.rs2 := idu_dpi.rs2
-        dpiBundleTemp.rd := idu_dpi.rd
-        dpiBundleTemp.imm := idu_dpi.imm
-        dpiBundleTemp.rs1Data := idu_dpi.rs1Data
-        dpiBundleTemp.rs2Data := idu_dpi.rs2Data
-        dpiBundleTemp.memWriteEnable := mau_dpi.memWriteEnable
-        dpiBundleTemp.memReadEnable := mau_dpi.memReadEnable
-        dpiBundleTemp.ecallEnable := exu_dpi.ecallEnable
+        generalDPI.physicalRAM <> physicalRAM.io.dpi
+        generalDPI.gpr <> gprFile.io.dpi
+        generalDPI.csr <> csrFile.io.dpi
 
-        dpiBundleTemp.executing := executing
-        dpiBundleTemp.ifuInputValid := !executing
-        dpiBundleTemp.if_nextStage_valid := ifu.io.nextStage.valid
-        dpiBundleTemp.id_nextStage_valid := idu.io.nextStage.valid
-        dpiBundleTemp.ex_nextStage_valid := exu.io.nextStage.valid
-        dpiBundleTemp.ma_nextStage_valid := mau.io.nextStage.valid
-        dpiBundleTemp.wb_nextStage_valid := wbu.io.nextStage.valid
-        dpiBundleTemp.upcu_pcOutput_valid := upcu.io.pcOutput.valid
+        generalDPI.ifu <> ifu.io.dpi
+        generalDPI.idu <> idu.io.dpi
+        generalDPI.exu <> exu.io.dpi
+        generalDPI.mau <> mau.io.dpi
+        generalDPI.wbu <> wbu.io.dpi
+        generalDPI.upcu <> upcu.io.dpi
 
-        val ioDPI = IO(new DPIBundle)
-        ioDPI <> dpiBundleTemp
+        val ioDPI = IO(new GeneralDPIBundle(xLen))
+        ioDPI <> generalDPI
 
-        val dpi = Module(new DPIAdapter)
-        dpi.io <> dpiBundleTemp
+        val dpi = Module(new GeneralDPIAdapter(xLen))
+        dpi.io <> generalDPI
     }
 }
 
@@ -201,7 +153,7 @@ object ProcessorCore extends App {
      */
 
     // 我们把阶段的表示省掉, 因为各个阶段单元已经模块化, 之间遵循握手协议传递信息.
-    // 所以没必要再量化表示各个阶段.
+    // 所以在硬件电路中就没必要再量化表示各个阶段.
 
     val cs = new ChiselStage
     cs.execute(

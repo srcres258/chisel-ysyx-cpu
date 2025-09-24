@@ -12,6 +12,8 @@ class LoadAndStoreUnit(
       */
     val xLen: Int = 32
 ) extends Module {
+    val dataStrobeLen: Int = xLen / 8
+
     val io = IO(new Bundle {
         val readDataOut = Output(UInt(xLen.W))
         val readDataIn = Input(UInt(xLen.W))
@@ -35,15 +37,15 @@ class LoadAndStoreUnit(
     lsTypeCasesW(LoadAndStoreUnit.LS_S_H) = Cat(Fill(xLen / 2, 0.U(1.W)), io.writeDataIn(xLen / 2 - 1, 0))
     io.writeDataOut := Mux1H(lsTypeOH, lsTypeCasesW.toIndexedSeq)
 
-    val lsTypeCasesStrobe = Array.fill[UInt](1 << LoadAndStoreUnit.LS_TYPE_LEN)(0.U(LoadAndStoreUnit.DATA_STROBE_LEN.W))
-    lsTypeCasesStrobe(LoadAndStoreUnit.LS_L_B)  = 0b0001.U(LoadAndStoreUnit.DATA_STROBE_LEN.W)
-    lsTypeCasesStrobe(LoadAndStoreUnit.LS_L_BU) = 0b0001.U(LoadAndStoreUnit.DATA_STROBE_LEN.W)
-    lsTypeCasesStrobe(LoadAndStoreUnit.LS_L_H)  = 0b0011.U(LoadAndStoreUnit.DATA_STROBE_LEN.W)
-    lsTypeCasesStrobe(LoadAndStoreUnit.LS_L_HU) = 0b0011.U(LoadAndStoreUnit.DATA_STROBE_LEN.W)
-    lsTypeCasesStrobe(LoadAndStoreUnit.LS_L_W)  = 0b1111.U(LoadAndStoreUnit.DATA_STROBE_LEN.W)
-    lsTypeCasesStrobe(LoadAndStoreUnit.LS_S_B)  = 0b0001.U(LoadAndStoreUnit.DATA_STROBE_LEN.W)
-    lsTypeCasesStrobe(LoadAndStoreUnit.LS_S_H)  = 0b0011.U(LoadAndStoreUnit.DATA_STROBE_LEN.W)
-    lsTypeCasesStrobe(LoadAndStoreUnit.LS_S_W)  = 0b1111.U(LoadAndStoreUnit.DATA_STROBE_LEN.W)
+    val lsTypeCasesStrobe = Array.fill[UInt](1 << LoadAndStoreUnit.LS_TYPE_LEN)(0.U(dataStrobeLen.W))
+    lsTypeCasesStrobe(LoadAndStoreUnit.LS_L_B)  = 0b0001.U(dataStrobeLen.W)
+    lsTypeCasesStrobe(LoadAndStoreUnit.LS_L_BU) = 0b0001.U(dataStrobeLen.W)
+    lsTypeCasesStrobe(LoadAndStoreUnit.LS_L_H)  = 0b0011.U(dataStrobeLen.W)
+    lsTypeCasesStrobe(LoadAndStoreUnit.LS_L_HU) = 0b0011.U(dataStrobeLen.W)
+    lsTypeCasesStrobe(LoadAndStoreUnit.LS_L_W)  = 0b1111.U(dataStrobeLen.W)
+    lsTypeCasesStrobe(LoadAndStoreUnit.LS_S_B)  = 0b0001.U(dataStrobeLen.W)
+    lsTypeCasesStrobe(LoadAndStoreUnit.LS_S_H)  = 0b0011.U(dataStrobeLen.W)
+    lsTypeCasesStrobe(LoadAndStoreUnit.LS_S_W)  = 0b1111.U(dataStrobeLen.W)
     io.dataStrobe := Mux1H(lsTypeOH, lsTypeCasesStrobe.toIndexedSeq)
 }
 
@@ -64,6 +66,4 @@ object LoadAndStoreUnit {
     val LS_S_H: Int = 6
     val LS_S_B: Int = 7
     val LS_UNKNOWN: Int = 1 << LS_TYPE_LEN - 1
-
-    val DATA_STROBE_LEN: Int = 4
 }

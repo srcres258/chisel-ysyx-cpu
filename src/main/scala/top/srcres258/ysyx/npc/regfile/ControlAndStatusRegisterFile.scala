@@ -3,6 +3,8 @@ package top.srcres258.ysyx.npc.regfile
 import chisel3._
 import chisel3.util._
 
+import top.srcres258.ysyx.npc.dpi.impl.ControlAndStatusRegisterFileDPIBundle
+
 /**
   * 处理器的控制与状态寄存器 (CSR) 文件模块
   */
@@ -23,7 +25,7 @@ class ControlAndStatusRegisterFile(
         val writePort1 = new ControlAndStatusRegisterFile.WritePort(xLen, regAddrWidth)
         val writePort2 = new ControlAndStatusRegisterFile.WritePort(xLen, regAddrWidth)
         
-        val registers = Output(Vec(1 << regAddrWidth, UInt(xLen.W)))
+        val dpi = new ControlAndStatusRegisterFileDPIBundle(xLen)
     })
 
     val registers = RegInit(ControlAndStatusRegisterFile.RegisterBundle(xLen))
@@ -61,21 +63,11 @@ class ControlAndStatusRegisterFile(
         }
     }
 
-    for (i <- 0 until io.registers.length) {
-        if (i == ControlAndStatusRegisterFile.CSR_MSTATUS) {
-            io.registers(i) := registers.mstatus
-        } else if (i == ControlAndStatusRegisterFile.CSR_MTVEC) {
-            io.registers(i) := registers.mtvec
-        } else if (i == ControlAndStatusRegisterFile.CSR_MEPC) {
-            io.registers(i) := registers.mepc
-        } else if (i == ControlAndStatusRegisterFile.CSR_MCAUSE) {
-            io.registers(i) := registers.mcause
-        } else if (i == ControlAndStatusRegisterFile.CSR_MTVAL) {
-            io.registers(i) := registers.mtval
-        } else {
-            io.registers(i) := 0.U
-        }
-    }
+    io.dpi.csr_mstatus := registers.mstatus
+    io.dpi.csr_mtvec := registers.mtvec
+    io.dpi.csr_mepc := registers.mepc
+    io.dpi.csr_mcause := registers.mcause
+    io.dpi.csr_mtval := registers.mtval
 }
 
 object ControlAndStatusRegisterFile {
@@ -94,6 +86,7 @@ object ControlAndStatusRegisterFile {
         val mcause = UInt(xLen.W)
         val mtval = UInt(xLen.W)
     }
+
     object RegisterBundle {
         def apply(xLen: Int = 32): RegisterBundle = {
             val default = Wire(new RegisterBundle(xLen))
@@ -123,6 +116,16 @@ object ControlAndStatusRegisterFile {
         val readAddress = Input(UInt(regAddrWidth.W))
     }
 
+    object ReadPort {
+        def defaultValuesForMaster(readPort: ReadPort): Unit = {
+            readPort.readAddress := 0.U
+        }
+
+        def defaultValuesForSlave(readPort: ReadPort): Unit = {
+            readPort.readData := 0.U
+        }
+    }
+
     /**
       * 寄存器文件的写入端口
       */
@@ -141,6 +144,14 @@ object ControlAndStatusRegisterFile {
         val writeAddress = Input(UInt(regAddrWidth.W))
     }
 
+    object WritePort {
+        def defaultValuesForMaster(writePort: WritePort): Unit = {
+            writePort.writeEnable := false.B
+            writePort.writeData := 0.U
+            writePort.writeAddress := 0.U
+        }
+    }
+
     /* (处理器已经实现的) CSR 编号 */
 
     val CSR_MSTATUS: Int = 0x300
@@ -148,4 +159,19 @@ object ControlAndStatusRegisterFile {
     val CSR_MEPC: Int = 0x341
     val CSR_MCAUSE: Int = 0x342
     val CSR_MTVAL: Int = 0x343
+
+    def defaultValuesForMaster(csrFile: ControlAndStatusRegisterFile): Unit = {
+        for (readPort <- List(csrFile.io.readPort1, csrFile.io.readPort2, csrFile.io.readPort3)) {
+            ReadPort.defaultValuesForMaster(readPort)
+        }
+        for (writePort <- List(csrFile.io.writePort1, csrFile.io.writePort2)) {
+            WritePort.defaultValuesForMaster(writePort)
+        }
+    }
+
+    def defaultValuesForSlave(csrFile: ControlAndStatusRegisterFile): Unit = {
+        for (readPort <- List(csrFile.io.readPort1, csrFile.io.readPort2, csrFile.io.readPort3)) {
+            ReadPort.defaultValuesForSlave(readPort)
+        }
+    }
 }

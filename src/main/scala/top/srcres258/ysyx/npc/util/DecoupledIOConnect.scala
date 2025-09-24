@@ -7,7 +7,7 @@ object DecoupledIOConnect {
     sealed abstract class Type(val name: String)
     case object Single extends Type("single")
     case object Multi extends Type("multi")
-    case class Pipeline(val initData: Data) extends Type("pipeline")
+    case object Pipeline extends Type("pipeline")
     case object OOO extends Type("ooo")
 
     def apply[T <: Data](
@@ -17,8 +17,8 @@ object DecoupledIOConnect {
     ): Unit = connectType match {
         case Single => right.bits := left.bits
         case Multi => right <> left
-        case p: Pipeline => {
-            val reg = RegEnable(left.bits, p.initData, left.fire)
+        case Pipeline => {
+            val reg = RegEnable(left.bits, left.fire)
             right.valid := left.valid
             right.bits := reg
             left.ready := right.ready

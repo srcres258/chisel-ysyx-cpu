@@ -3,7 +3,9 @@ package top.srcres258.ysyx.npc.stage
 import chisel3._
 import chisel3.util._
 
-import top.srcres258.ysyx.npc.dpi.DPIBundle
+import top.srcres258.ysyx.npc.dpi.impl.IFUnitDPIBundle
+import top.srcres258.ysyx.npc.PhysicalRAM
+import top.srcres258.ysyx.npc.bus.AXI4Lite
 
 /**
   * 处理器的取指 (Instruction Fetch) 单元。
@@ -15,57 +17,95 @@ class IFUnit(
     val xLen: Int = 32
 ) extends Module {
     val io = IO(new Bundle {
-        val input = Flipped(Decoupled(Output(new IFUnit.InputBundle(xLen))))
+        val executionInfo = Flipped(Decoupled(Flipped(new IFUnit.ExecutionInfo(xLen))))
+        val ramBus = new AXI4Lite(xLen)
 
         val nextStage = Decoupled(Output(new IF_ID_Bundle(xLen)))
+
+        val dpi = new IFUnitDPIBundle(xLen)
+
+        val working = Output(Bool())
     });
 
-    // val inputData = RegInit(IFUnit.InputBundle(xLen))
-    val inputData = Wire(new IFUnit.InputBundle(xLen))
+    val pc = Wire(UInt(xLen.W))
+    val instData = RegInit(0.U(xLen.W))
+
     val nextStageData = Wire(new IF_ID_Bundle(xLen))
-    val nextStagePrepared = RegInit(false.B)
 
-    val s_nextStage_idle :: s_nextStage_waitReady :: Nil = Enum(2)
+    /* 
+    IF 单元的所有状态 (从状态机视角考虑):
+    1. idle: 空闲状态, 等待 ProcessorCore 输送执行信息 (executionInfo).
+    2. waitData: 接收执行信息数据, 等待数据稳定到达.
+    3. wait_arready: 向 RAM 总线的 AR 信道输送取指地址 (PC 的值) 后, 等待 AR 信道的 ready 信号.
+    4. wait_rvalid: 等待 RAM 总线的 R 信道的 valid 信号.
+    5. wait_nextStage_ready: 从 RAM 总线的 R 信道取出指令数据, 准备下一处理器阶段单元的数据并输送,
+       然后等待下一处理器阶段单元的 ready 信号.
+    
+    状态流转方式:
+    1 (初始状态) -> 2 -> 3 -> 4 -> 5 -> 1 -> ...
 
-    val nextStageState = RegInit(s_nextStage_idle)
-    nextStageState := MuxLookup(nextStageState, s_nextStage_idle)(List(
-        s_nextStage_idle -> Mux(nextStagePrepared, s_nextStage_waitReady, s_nextStage_idle),
-        s_nextStage_waitReady -> Mux(io.nextStage.ready, s_nextStage_idle, s_nextStage_waitReady)
+    各状态之间所处理的事务:
+    1 -> 2:
+        等待一个时钟周期, 让数据平稳传递后再处理.
+        (防止因为数据还没到达就处理, 造成使用错误的数据处理事务.)
+    2 -> 3:
+        1. 回复 executionInfo 信息 (executionInfo.ready <- true).
+        2. 从 executionInfo 信息中获取 PC 值.
+        3. 向 RAM 总线的 AR 信道输送 PC 值, 作为取指地址.
+    3 -> 4:
+        无 (还需等待 rvalid 信号才能获取到指令数据以便后续操作).
+    4 -> 5:
+        1. 回复来自 RAM 总线的 R 信道的信息 (rready <- true).
+        2. 从 RAM 总线的 R 信道取出指令数据.
+           TODO: 注意: 这里默认 RAM 已经成功读出了数据 (即忽略 rresp 信号的信息), 后续若要将情况更一般化, rresp 信号是需要处理的.
+           可考虑将此情况反馈回 ProcessorCore, 让其进行异常情况处理;
+           或将此情况顺着流水顺序沿阶段继续向下传播, 让后续处理器阶段单元处理异常情况.
+        3. 准备下一处理器阶段单元的数据 (nextStageData).
+        4. 向下一处理器阶段单元输送数据 (nextStage.valid <- true, nextStage.bits <- nextStageData).
+    5 -> 1:
+        无 (本轮 IF 操作处理完毕, 等待 ProcessorCore 的下一份执行信息).
+     */
+    val s_idle :: s_waitData :: s_wait_arready :: s_wait_rvalid :: s_wait_nextStage_ready :: (
+        Nil) = Enum(5)
+
+    // 注意, 我们对电路建模时, 不要采用上面描述状态机行为的行为式语言对电路进行行为建模.
+    // 而是要回归组合逻辑, 即用组合逻辑描述各状态之间所处理的事务, 以及到下个状态的转移条件.
+    val state = RegInit(s_idle)
+    state := MuxLookup(state, s_idle)(List(
+        s_idle -> Mux(io.executionInfo.fire, s_waitData, s_idle),
+        s_waitData -> s_wait_arready,
+        s_wait_arready -> Mux(io.ramBus.ar.fire, s_wait_rvalid, s_wait_arready),
+        s_wait_rvalid -> Mux(io.ramBus.r.fire, s_wait_nextStage_ready, s_wait_rvalid),
+        s_wait_nextStage_ready -> Mux(io.nextStage.fire, s_idle, s_wait_nextStage_ready)
     ))
-    io.nextStage.valid := nextStageState === s_nextStage_waitReady
+    io.executionInfo.ready := state === s_idle
+    io.ramBus.ar.valid := state === s_wait_arready
+    io.ramBus.r.ready := state === s_wait_rvalid
+    io.ramBus.aw.valid := false.B
+    io.ramBus.aw.bits := DontCare
+    io.ramBus.w.valid := false.B
+    io.ramBus.w.bits := DontCare
+    io.ramBus.b.ready := false.B
+    io.nextStage.valid := state === s_wait_nextStage_ready
     io.nextStage.bits := nextStageData
 
-    inputData := io.input.bits
-    io.input.ready := !nextStagePrepared
-    when(io.input.valid) {
-        nextStagePrepared := true.B
-    }
-    when(nextStagePrepared && io.nextStage.ready) {
-        nextStagePrepared := false.B
+    pc := io.executionInfo.bits.pc
+    io.ramBus.ar.bits.addr := pc
+    when(state === s_wait_rvalid && io.ramBus.r.fire) {
+        instData := io.ramBus.r.bits.data
     }
 
-    nextStageData.pcCur := inputData.pc
-    nextStageData.pcNext := inputData.pc + 4.U(xLen.W)
-    nextStageData.inst := inputData.instData
+    nextStageData.pcCur := pc
+    nextStageData.pcNext := pc + 4.U(xLen.W)
+    nextStageData.inst := instData
+
+    io.dpi.if_nextStage_valid := io.nextStage.valid
+
+    io.working := state =/= s_idle
 }
 
 object IFUnit {
-    class InputBundle(
-        /**
-          * xLen: 处理器位数，在 RV32I 指令集中为 32
-          */
-        val xLen: Int = 32
-    ) extends Bundle {
-        val pc = UInt(xLen.W)
-        val instData = UInt(xLen.W)
-    }
-
-    object InputBundle {
-        def apply(xLen: Int = 32): InputBundle = {
-            val result = Wire(new InputBundle(xLen))
-            result.pc := 0.U(xLen.W)
-            result.instData := 0.U(xLen.W)
-            result
-        }
+    class ExecutionInfo(val xLen: Int) extends Bundle {
+        val pc = Input(UInt(xLen.W))
     }
 }

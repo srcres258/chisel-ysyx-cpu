@@ -3,6 +3,8 @@ package top.srcres258.ysyx.npc.regfile
 import chisel3._
 import chisel3.util._
 
+import top.srcres258.ysyx.npc.dpi.impl.GeneralPurposeRegisterFileDPIBundle
+
 /**
   * 处理器的通用寄存器 (GPR) 文件模块
   */
@@ -20,7 +22,7 @@ class GeneralPurposeRegisterFile(
         val readPort = new GeneralPurposeRegisterFile.ReadPort(xLen, regAddrWidth)
         val writePort = new GeneralPurposeRegisterFile.WritePort(xLen, regAddrWidth)
 
-        val registers = Output(Vec(1 << regAddrWidth, UInt(xLen.W)))
+        val dpi = new GeneralPurposeRegisterFileDPIBundle(xLen)
     })
 
     val registers = RegInit(VecInit(Seq.fill(1 << regAddrWidth)(0.U(xLen.W))))
@@ -32,8 +34,8 @@ class GeneralPurposeRegisterFile(
         registers(io.writePort.writeAddress) := io.writePort.writeData
     }
 
-    for (i <- 0 until io.registers.length) {
-        io.registers(i) := registers(i)
+    for (i <- 0 until io.dpi.gprs.length) {
+        io.dpi.gprs(i) := registers(i)
     }
 
     registers(0.U) := 0.U // RISC-V 规范规定：x0 寄存器恒为 0
@@ -60,6 +62,18 @@ object GeneralPurposeRegisterFile {
         val readAddress2 = Input(UInt(regAddrWidth.W))
     }
 
+    object ReadPort {
+        def defaultValuesForMaster(readPort: ReadPort): Unit = {
+            readPort.readAddress1 := 0.U
+            readPort.readAddress2 := 0.U
+        }
+
+        def defaultValuesForSlave(readPort: ReadPort): Unit = {
+            readPort.readData1 := 0.U
+            readPort.readData2 := 0.U
+        }
+    }
+
     /**
       * 寄存器文件的写入端口
       */
@@ -76,5 +90,23 @@ object GeneralPurposeRegisterFile {
         val writeEnable = Input(Bool())
         val writeData = Input(UInt(xLen.W))
         val writeAddress = Input(UInt(regAddrWidth.W))
+    }
+
+    object WritePort {
+        def defaultValuesForMaster(writePort: WritePort): Unit = {
+            writePort.writeEnable := false.B
+            writePort.writeData := 0.U
+            writePort.writeAddress := 0.U
+        }
+    }
+
+    def defaultValuesForMaster(gprFile: GeneralPurposeRegisterFile): Unit = {
+        ReadPort.defaultValuesForMaster(gprFile.io.readPort)
+        WritePort.defaultValuesForMaster(gprFile.io.writePort)
+    }
+
+    def defaultValuesForSlave(gprFile: GeneralPurposeRegisterFile): Unit = {
+        ReadPort.defaultValuesForSlave(gprFile.io.readPort)
+        WritePort.defaultValuesForMaster(gprFile.io.writePort)
     }
 }

@@ -6,8 +6,7 @@ import chisel3.util._
 import top.srcres258.ysyx.npc.ArithmeticLogicUnit
 import top.srcres258.ysyx.npc.ComparatorUnit
 import top.srcres258.ysyx.npc.PCTargetController
-import top.srcres258.ysyx.npc.dpi.DPIBundle
-import top.srcres258.ysyx.npc.debug.DebugBundle
+import top.srcres258.ysyx.npc.dpi.impl.EXUnitDPIBundle
 
 /**
   * 处理器的执行 (Execute) 单元。
@@ -22,36 +21,47 @@ class EXUnit(
         val prevStage = Flipped(Decoupled(Output(new ID_EX_Bundle(xLen))))
         val nextStage = Decoupled(Output(new EX_MA_Bundle(xLen)))
 
-        val debug = Output(new EXUnitDebugBundle(xLen))
+        val dpi = new EXUnitDPIBundle(xLen)
+
+        val working = Output(Bool())
     })
 
     val prevStageData = Wire(new ID_EX_Bundle(xLen))
     val nextStageData = Wire(new EX_MA_Bundle(xLen))
-    val nextStagePrepared = RegInit(false.B)
 
-    val s_prevStage_idle :: s_prevStage_waitReset :: Nil = Enum(2)
-    val s_nextStage_idle :: s_nextStage_waitReady :: Nil = Enum(2)
+    /* 
+    EX 单元的所有状态 (从状态机视角考虑):
+    1. idle: 空闲状态, 等待上游 ID 单元传送数据.
+    2. waitData: 接收来自上游 ID 单元传送的数据, 等待数据稳定到达.
+    3. wait_nextStage_ready: 准备下一处理器阶段单元的数据并输送, 然后等待下一处理器阶段单元的 ready 信号.
+       (注: EX 单元的工作在单周期内即可完成, 所以无需存在中间的工作状态.)
+    
+    状态流转方式:
+    1 (初始状态) -> 2 -> 3 -> 1 -> ...
 
-    val prevStageState = RegInit(s_prevStage_idle)
-    val nextStageState = RegInit(s_nextStage_idle)
-    prevStageState := MuxLookup(prevStageState, s_prevStage_idle)(List(
-        s_prevStage_idle -> Mux(io.prevStage.valid, s_prevStage_waitReset, s_prevStage_idle),
-        s_prevStage_waitReset -> Mux(!io.prevStage.valid, s_prevStage_idle, s_prevStage_waitReset)
+    各状态之间所处理的事务:
+    1 -> 2:
+        等待一个时钟周期, 让上游数据平稳传递后再处理.
+        (防止因为数据还没到达就处理, 造成使用错误的数据处理事务.)
+    2 -> 3:
+        1. 回复上游 ID 单元的传递数据请求.
+        2. 取出来自 ID 单元的数据, 对数据用组合逻辑进行处理, 形成传递给下一处理器阶段单元的数据.
+        3. 向下一处理器阶段单元输送数据.
+    3 -> 1:
+        无 (本轮 EX 操作处理完毕, 等待来自上游 ID 单元的下一份数据).
+     */
+    val s_idle :: s_waitData :: s_wait_nextStage_ready :: Nil = Enum(3)
+
+    val state = RegInit(s_idle)
+    state := MuxLookup(state, s_idle)(List(
+        s_idle -> Mux(io.prevStage.fire, s_waitData, s_idle),
+        s_waitData -> s_wait_nextStage_ready,
+        s_wait_nextStage_ready -> Mux(io.nextStage.fire, s_idle, s_wait_nextStage_ready)
     ))
-    nextStageState := MuxLookup(nextStageState, s_nextStage_idle)(List(
-        s_nextStage_idle -> Mux(nextStagePrepared, s_nextStage_waitReady, s_nextStage_idle),
-        s_nextStage_waitReady -> Mux(io.nextStage.ready, s_nextStage_idle, s_nextStage_waitReady)
-    ))
-    io.prevStage.ready := !nextStagePrepared
-    io.nextStage.valid := nextStageState === s_nextStage_waitReady
-    io.nextStage.bits := nextStageData
+    io.prevStage.ready := state === s_idle
+    io.nextStage.valid := state === s_wait_nextStage_ready
     prevStageData := io.prevStage.bits
-    when(io.prevStage.valid) {
-        nextStagePrepared := true.B
-    }
-    when(nextStagePrepared && io.nextStage.ready) {
-        nextStagePrepared := false.B
-    }
+    io.nextStage.bits := nextStageData
 
     val aluOutput = Wire(UInt(xLen.W))
     val branchEnable = Wire(Bool())
@@ -92,8 +102,6 @@ class EXUnit(
     pcTargetCtrl.io.ecallEnable := prevStageData.ecallEnable
     pcTargetCtrl.io.tvecData := prevStageData.tvecData
 
-    io.debug.ecallEnable := prevStageData.ecallEnable
-
     nextStageData.pcCur := prevStageData.pcCur
     nextStageData.pcNext := prevStageData.pcNext
     nextStageData.pcTarget := pcTargetCtrl.io.pcTarget
@@ -119,18 +127,13 @@ class EXUnit(
     nextStageData.ecallEnable := prevStageData.ecallEnable
     nextStageData.inst_jal := prevStageData.inst_jal
     nextStageData.inst_jalr := prevStageData.inst_jalr
-}
 
-class EXUnitDebugBundle(val xLen: Int = 32) extends DebugBundle {
-    val ecallEnable = Bool()
-}
-
-object EXUnitDebugBundle {
-    def apply(xLen: Int = 32): EXUnitDebugBundle = {
-        val default = Wire(new EXUnitDebugBundle(xLen))
-
-        default.ecallEnable := false.B
-
-        default
+    when(state === s_wait_nextStage_ready) {
+        io.dpi.ecallEnable := prevStageData.ecallEnable
+    }.otherwise {
+        io.dpi.ecallEnable := false.B
     }
+    io.dpi.ex_nextStage_valid := io.nextStage.valid
+
+    io.working := state =/= s_idle
 }
