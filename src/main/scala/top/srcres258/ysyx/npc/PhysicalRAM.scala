@@ -5,6 +5,7 @@ import chisel3.util._
 
 import top.srcres258.ysyx.npc.dpi.impl.PhysicalRAMDPIBundle
 import top.srcres258.ysyx.npc.bus.AXI4Lite
+import top.srcres258.ysyx.npc.arbiter.RoundRobinArbiter
 
 /**
   * 物理内存 RAM 模块
@@ -16,7 +17,8 @@ class PhysicalRAM(
     val xLen: Int = 32
 ) extends Module {
     val io = IO(new Bundle {
-        val bus = Flipped(new AXI4Lite(xLen))
+        val busPorts = Vec(PhysicalRAM.ARBITER_MAX_MASTER_AMOUNT, Flipped(new AXI4Lite(xLen)))
+        val arbiter = new RoundRobinArbiter.IOBundle(PhysicalRAM.ARBITER_MAX_MASTER_AMOUNT)
 
         val dpi = new PhysicalRAMDPIBundle(xLen)
     })
@@ -32,6 +34,24 @@ class PhysicalRAM(
     val wdata = RegInit(0.U(xLen.W))
     val wstrb = RegInit(0.U(xLen.W))
     val bresp = RegInit(0.U(AXI4Lite.RESP_WIDTH.W))
+
+    /**
+      * 仲裁器: 我们这里选用 Round-Robin Arbiter.
+      */
+    val arbiter = Module(new RoundRobinArbiter(PhysicalRAM.ARBITER_MAX_MASTER_AMOUNT))
+    io.arbiter <> arbiter.io
+    /**
+      * 当前由仲裁器所放行的总线信号.
+      */
+    val bus = Wire(Flipped(new AXI4Lite(xLen)))
+    for (i <- 0 until PhysicalRAM.ARBITER_MAX_MASTER_AMOUNT) {
+        AXI4Lite.defaultValuesForSlave(io.busPorts(i))
+    }
+    when(arbiter.io.grantIdx === PhysicalRAM.ARBITER_MAX_MASTER_AMOUNT.U) {
+        AXI4Lite.defaultValuesForMaster(bus)
+    }.otherwise {
+        bus <> io.busPorts(arbiter.io.grantIdx)
+    }
 
     /* 
     PhysicalRAM 模块的所有状态 (从状态机视角考虑):
@@ -82,28 +102,28 @@ class PhysicalRAM(
     val state = RegInit(s_idle)
     state := MuxLookup(state, s_idle)(List(
         s_idle -> MuxCase(s_idle, Seq(
-            io.bus.ar.fire -> s_read_doAction,
-            io.bus.aw.fire -> s_write_wait_wvalid
+            bus.ar.fire -> s_read_doAction,
+            bus.aw.fire -> s_write_wait_wvalid
         )),
 
         s_read_doAction -> Mux(readRoutineDone, s_read_wait_rready, s_read_doAction),
-        s_read_wait_rready -> Mux(io.bus.r.fire, s_idle, s_read_wait_rready),
+        s_read_wait_rready -> Mux(bus.r.fire, s_idle, s_read_wait_rready),
 
-        s_write_wait_wvalid -> Mux(io.bus.w.fire, s_write_doAction, s_write_wait_wvalid),
+        s_write_wait_wvalid -> Mux(bus.w.fire, s_write_doAction, s_write_wait_wvalid),
         s_write_doAction -> Mux(writeRoutineDone, s_write_wait_bready, s_write_doAction),
-        s_write_wait_bready -> Mux(io.bus.b.fire, s_idle, s_write_wait_bready)
+        s_write_wait_bready -> Mux(bus.b.fire, s_idle, s_write_wait_bready)
     ))
-    io.bus.ar.ready := state === s_idle
-    io.bus.aw.ready := state === s_idle
-    io.bus.r.valid := state === s_read_wait_rready
-    io.bus.w.ready := state === s_write_wait_wvalid
-    io.bus.b.valid := state === s_write_wait_bready
+    bus.ar.ready := state === s_idle
+    bus.aw.ready := state === s_idle
+    bus.r.valid := state === s_read_wait_rready
+    bus.w.ready := state === s_write_wait_wvalid
+    bus.b.valid := state === s_write_wait_bready
 
     readRoutineDone := false.B
     io.dpi.read.readEnable := false.B
     io.dpi.read.readAddress := 0.U
-    when(state === s_idle && io.bus.ar.fire) {
-        araddr := io.bus.ar.bits.addr
+    when(state === s_idle && bus.ar.fire) {
+        araddr := bus.ar.bits.addr
     }.elsewhen(state === s_read_doAction) {
         readRoutineDone := readRoutineTimer >= PhysicalRAM.READ_ROUTINE_CLOCK_CYCLES.U
         when(readRoutineDone) {
@@ -116,19 +136,19 @@ class PhysicalRAM(
             readRoutineTimer := readRoutineTimer + 1.U
         }
     }
-    io.bus.r.bits.data := rdata
-    io.bus.r.bits.resp := rresp
+    bus.r.bits.data := rdata
+    bus.r.bits.resp := rresp
 
     writeRoutineDone := false.B
     io.dpi.write.writeEnable := false.B
     io.dpi.write.writeAddress := 0.U
     io.dpi.write.writeData := 0.U
     io.dpi.write.writeDataStrobe := 0.U
-    when(state === s_idle && io.bus.aw.fire) {
-        awaddr := io.bus.aw.bits.addr
-    }.elsewhen(state === s_write_wait_wvalid && io.bus.w.fire) {
-        wdata := io.bus.w.bits.data
-        wstrb := io.bus.w.bits.strb
+    when(state === s_idle && bus.aw.fire) {
+        awaddr := bus.aw.bits.addr
+    }.elsewhen(state === s_write_wait_wvalid && bus.w.fire) {
+        wdata := bus.w.bits.data
+        wstrb := bus.w.bits.strb
     }.elsewhen(state === s_write_doAction) {
         writeRoutineDone := writeRoutineTimer >= PhysicalRAM.WRITE_ROUTINE_CLOCK_CYCLES.U
         when(writeRoutineDone) {
@@ -142,10 +162,14 @@ class PhysicalRAM(
             writeRoutineTimer := writeRoutineTimer + 1.U
         }
     }
-    io.bus.b.bits.resp := bresp
+    bus.b.bits.resp := bresp
 }
 
 object PhysicalRAM {
+    val ARBITER_MAX_MASTER_AMOUNT: Int = 4
+    val ARBITER_MASTER_IDX_IF_UNIT: Int = 0
+    val ARBITER_MASTER_IDX_MA_UNIT: Int = 1
+
     val READ_ROUTINE_CLOCK_CYCLES: Int = 5
     val WRITE_ROUTINE_CLOCK_CYCLES: Int = 5
     val READ_ROUTINE_TIMER_WIDTH: Int = log2Ceil(READ_ROUTINE_CLOCK_CYCLES)

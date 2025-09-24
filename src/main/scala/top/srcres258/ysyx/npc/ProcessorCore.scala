@@ -14,6 +14,7 @@ import top.srcres258.ysyx.npc.regfile.ControlAndStatusRegisterFile
 import top.srcres258.ysyx.npc.util.DecoupledIOConnect
 import top.srcres258.ysyx.npc.dpi.impl._
 import top.srcres258.ysyx.npc.bus.AXI4Lite
+import top.srcres258.ysyx.npc.arbiter.RoundRobinArbiter
 
 /**
   * RV32I 单周期处理器核心
@@ -31,6 +32,8 @@ class ProcessorCore(
       */
     val xLen: Int = 32
 ) extends Module {
+    require(xLen == 32 || xLen == 64, "Only 32-bit or 64-bit processor core is supported.")
+
     val executing = RegInit(false.B)
 
     val pc_r = RegInit(ProcessorCore.PC_INITIAL_VAL)
@@ -44,7 +47,10 @@ class ProcessorCore(
     ControlAndStatusRegisterFile.defaultValuesForMaster(csrFile)
 
     val physicalRAM = Module(new PhysicalRAM(xLen))
-    AXI4Lite.defaultValuesForMaster(physicalRAM.io.bus)
+    for (i <- 0 until PhysicalRAM.ARBITER_MAX_MASTER_AMOUNT) {
+        AXI4Lite.defaultValuesForMaster(physicalRAM.io.busPorts(i))
+    }
+    RoundRobinArbiter.IOBundle.defaultValuesForMaster(physicalRAM.io.arbiter)
 
     val ifu = Module(new IFUnit(xLen))
     ifu.io.executionInfo.bits.pc := pc_r
@@ -53,8 +59,14 @@ class ProcessorCore(
     }
     ifu.io.executionInfo.valid := !executing
     when(ifu.io.working) {
-        ifu.io.ramBus <> physicalRAM.io.bus
+        physicalRAM.io.arbiter.req(PhysicalRAM.ARBITER_MASTER_IDX_IF_UNIT) := ifu.io.arbiterReq
+        physicalRAM.io.arbiter.release(PhysicalRAM.ARBITER_MASTER_IDX_IF_UNIT).valid := ifu.io.arbiterRelease
+        ifu.io.arbiterGranted := physicalRAM.io.arbiter.grantIdx === PhysicalRAM.ARBITER_MASTER_IDX_IF_UNIT.U
+        ifu.io.arbiterReleaseReady := physicalRAM.io.arbiter.release(PhysicalRAM.ARBITER_MASTER_IDX_IF_UNIT).ready
+        ifu.io.ramBus <> physicalRAM.io.busPorts(PhysicalRAM.ARBITER_MASTER_IDX_IF_UNIT)
     }.otherwise {
+        ifu.io.arbiterGranted := false.B
+        ifu.io.arbiterReleaseReady := false.B
         AXI4Lite.defaultValuesForSlave(ifu.io.ramBus)
     }
 
@@ -78,8 +90,14 @@ class ProcessorCore(
     val mau = Module(new MAUnit(xLen))
     DecoupledIOConnect(exu.io.nextStage, mau.io.prevStage, DecoupledIOConnect.Pipeline)
     when(mau.io.working) {
-        mau.io.ramBus <> physicalRAM.io.bus
+        physicalRAM.io.arbiter.req(PhysicalRAM.ARBITER_MASTER_IDX_MA_UNIT) := mau.io.arbiterReq
+        physicalRAM.io.arbiter.release(PhysicalRAM.ARBITER_MASTER_IDX_MA_UNIT).valid := mau.io.arbiterRelease
+        mau.io.arbiterGranted := physicalRAM.io.arbiter.grantIdx === PhysicalRAM.ARBITER_MASTER_IDX_MA_UNIT.U
+        mau.io.arbiterReleaseReady := physicalRAM.io.arbiter.release(PhysicalRAM.ARBITER_MASTER_IDX_MA_UNIT).ready
+        mau.io.ramBus <> physicalRAM.io.busPorts(PhysicalRAM.ARBITER_MASTER_IDX_MA_UNIT)
     }.otherwise {
+        mau.io.arbiterGranted := false.B
+        mau.io.arbiterReleaseReady := false.B
         AXI4Lite.defaultValuesForSlave(mau.io.ramBus)
     }
 
