@@ -48,7 +48,7 @@ class PhysicalRAM(val xLen: Int) extends Module {
     when(arbiter.io.grantIdx === PhysicalRAM.ARBITER_MAX_MASTER_AMOUNT.U) {
         AXI4Lite.defaultValuesForMaster(bus)
     }.otherwise {
-        bus <> io.busPorts(arbiter.io.grantIdx)
+        bus <> io.busPorts(arbiter.io.grantIdxNormal)
     }
 
     /* 

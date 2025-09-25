@@ -15,22 +15,26 @@ class RoundRobinArbiter(
     val num: Int
 ) extends Module {
     require(num > 0, "Number of masters must be greater than 0.")
-    private val idxWidth = log2Ceil(num + 1).W
+
+    private val idxWidthNum = RoundRobinArbiter.calcIdxWidth(num)
+    private val idxWidth = idxWidthNum.W
+    private val normalIdxWidthNum = RoundRobinArbiter.calcNormalIdxWidth(num)
+    private val normalIdxWidth = normalIdxWidthNum.W
 
     val io = IO(new RoundRobinArbiter.IOBundle(num))
 
     /**
       * 轮询状态: 记录上一次授权的请求者索引, 初始值为 num - 1.
       */
-    val lastGrantIdx = RegInit((num - 1).U(idxWidth))
+    val lastGrantIdx = RegInit((num - 1).U(normalIdxWidth))
     /**
       * 当前被授权的请求者索引.
       */
-    val curGrantIdx = RegInit((num - 1).U(idxWidth))
+    val curGrantIdx = RegInit((num - 1).U(normalIdxWidth))
     /**
       * 优先查找的起始索引.
       */
-    val startIdx = Wire(UInt(idxWidth))
+    val startIdx = Wire(UInt(normalIdxWidth))
     /**
       * 是否查找到了可以进行授权的请求者.
       */
@@ -75,7 +79,7 @@ class RoundRobinArbiter(
     found := (0 until num).map(i => io.req((startIdx + i.U) % num.U))
         .reduce(_ || _)
     grantIdxTemp := (0 to num).map(i => (startIdx + i.U) % num.U)
-        .reduceRight((latter, former) => Mux(io.req(former), former, latter))
+        .reduceRight((latter, former) => Mux(io.req(former(normalIdxWidthNum - 1, 0)), former, latter))
     when(state === s_idle && found) {
         curGrantIdx := grantIdxTemp
     }
@@ -85,7 +89,10 @@ class RoundRobinArbiter(
     for (i <- 0 until num) {
         io.release(i).ready := i.U === curGrantIdx
     }
-    io.grantIdx := Mux(state === s_idle, num.U, curGrantIdx)
+    val grantIdx = Wire(UInt(idxWidth))
+    grantIdx := Mux(state === s_idle, num.U, curGrantIdx)
+    io.grantIdx := grantIdx
+    io.grantIdxNormal := grantIdx(normalIdxWidthNum - 1, 0)
 }
 
 object RoundRobinArbiter {
@@ -108,7 +115,11 @@ object RoundRobinArbiter {
           * 合法范围: [0, num - 1]. 若当前无请求者向该仲裁器提出请求 (空闲),
           * 则输出 num (表示无请求者被授权).
           */
-        val grantIdx = Output(UInt(log2Ceil(num + 1).W)) // 可输出 num 表示无请求.
+        val grantIdx = Output(UInt(RoundRobinArbiter.calcIdxWidth(num).W)) // 可输出 num 表示无请求.
+        /**
+          * 当前被授权的请求者索引. 输出值同 grantIdx, 但位数为请求者索引合法的情况, 即不会多出数位表示无请求的情况.
+          */
+        val grantIdxNormal = Output(UInt(RoundRobinArbiter.calcNormalIdxWidth(num).W))
     }
 
     object IOBundle {
@@ -119,4 +130,8 @@ object RoundRobinArbiter {
             }
         }
     }
+
+    private def calcIdxWidth(num: Int): Int = log2Ceil(num + 1)
+
+    private def calcNormalIdxWidth(num: Int): Int = log2Ceil(num)
 }
