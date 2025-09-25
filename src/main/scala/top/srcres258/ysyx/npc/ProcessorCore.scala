@@ -16,18 +16,18 @@ import top.srcres258.ysyx.npc.dpi.impl._
 import top.srcres258.ysyx.npc.bus.AXI4Lite
 import top.srcres258.ysyx.npc.arbiter.RoundRobinArbiter
 import top.srcres258.ysyx.npc.util.Assertion
+import top.srcres258.ysyx.npc.dpi.dummy.DummyPhysicalRAM
 
 /**
   * RV32I 单周期处理器核心/
   */
 class ProcessorCore(
     /**
-      * 是否启用 DPI 信号输出, 供仿真环境访问.
+      * 是否启用 DPIAdapter, 向仿真环境提供触发信号以触发特定事件.
       * 
-      * 网表综合时应将该选项置为 false 以省去不必要信号元件,
-      * 获得最真实的硬件级仿真结果.
+      * 若禁用, 则另外自行生成硬件级别的 dummy 元件以供综合分析工具进行网表综合分析.
       */
-    enableDPI: Boolean,
+    enableDPIAdapter: Boolean,
     /**
       * 处理器字长.
       */
@@ -121,35 +121,38 @@ class ProcessorCore(
     }
     upcu.io.pcOutput.ready := executing
 
-    if (enableDPI) {
-        val generalDPI = Wire(new GeneralDPIBundle(xLen))
+    val generalDPI = Wire(new GeneralDPIBundle(xLen))
 
-        generalDPI.core.pc := pc_r
-        /* 
-        RV32I 中，ebreak 指令的机器码是 0x00100073
-        目前我们硬编码该指令为处理器仿真结束指令，遇到该指令时将 halt 输出置高电平，
-        外部 BlackBox 检测到到该电平上升沿后，自动调用 DPI-C 接口终止仿真。
-         */
-        generalDPI.core.halt := idu.io.dpi.inst === "h00100073".U(32.W)
-        generalDPI.core.executing := executing
-        generalDPI.core.ifuInputValid := !executing
+    generalDPI.core.pc := pc_r
+    /* 
+    RV32I 中，ebreak 指令的机器码是 0x00100073
+    目前我们硬编码该指令为处理器仿真结束指令，遇到该指令时将 halt 输出置高电平，
+    外部 BlackBox 检测到到该电平上升沿后，自动调用 DPI-C 接口终止仿真。
+     */
+    generalDPI.core.halt := idu.io.dpi.inst === "h00100073".U(32.W)
+    generalDPI.core.executing := executing
+    generalDPI.core.ifuInputValid := !executing
 
-        generalDPI.physicalRAM <> physicalRAM.io.dpi
-        generalDPI.gpr <> gprFile.io.dpi
-        generalDPI.csr <> csrFile.io.dpi
+    generalDPI.physicalRAM <> physicalRAM.io.dpi
+    generalDPI.gpr <> gprFile.io.dpi
+    generalDPI.csr <> csrFile.io.dpi
 
-        generalDPI.ifu <> ifu.io.dpi
-        generalDPI.idu <> idu.io.dpi
-        generalDPI.exu <> exu.io.dpi
-        generalDPI.mau <> mau.io.dpi
-        generalDPI.wbu <> wbu.io.dpi
-        generalDPI.upcu <> upcu.io.dpi
+    generalDPI.ifu <> ifu.io.dpi
+    generalDPI.idu <> idu.io.dpi
+    generalDPI.exu <> exu.io.dpi
+    generalDPI.mau <> mau.io.dpi
+    generalDPI.wbu <> wbu.io.dpi
+    generalDPI.upcu <> upcu.io.dpi
 
-        val ioDPI = IO(new GeneralDPIBundle(xLen))
-        ioDPI <> generalDPI
+    val ioDPI = IO(new GeneralDPIBundle(xLen))
+    ioDPI <> generalDPI
 
+    if (enableDPIAdapter) {
         val dpi = Module(new GeneralDPIAdapter(xLen))
         dpi.io <> generalDPI
+    } else {
+        val dummyPhysicalRAM = Module(new DummyPhysicalRAM(xLen))
+        dummyPhysicalRAM.io.dpi <> generalDPI.physicalRAM
     }
 }
 
@@ -183,7 +186,7 @@ object ProcessorCore extends App {
             "--firtool-option", "-lowering-options=disallowLocalVariables"
         ),
         Seq(ChiselGeneratorAnnotation(() => new ProcessorCore(
-            args.length > 0 && args(0) == "enableDPI",
+            args.length > 0 && args(0) == "enableDPIAdapter",
             xLen = 32 // 32 位 RISC-V ISA, 处理器字长为 32.
         )))
     )
