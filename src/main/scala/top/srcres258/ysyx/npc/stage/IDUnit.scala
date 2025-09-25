@@ -11,16 +11,14 @@ import top.srcres258.ysyx.npc.ImmediateSignExtend
 import top.srcres258.ysyx.npc.regfile.GeneralPurposeRegisterFile
 import top.srcres258.ysyx.npc.regfile.ControlAndStatusRegisterFile
 import top.srcres258.ysyx.npc.dpi.impl.IDUnitDPIBundle
+import top.srcres258.ysyx.npc.util.Assertion
 
 /**
-  * 处理器的译码 (Instruction Decode) 单元。
+  * 处理器的译码 (Instruction Decode) 单元.
   */
-class IDUnit(
-    /**
-      * xLen: 处理器位数，在 RV32I 指令集中为 32
-      */
-    val xLen: Int = 32
-) extends Module {
+class IDUnit(val xLen: Int) extends Module {
+    Assertion.assertProcessorXLen(xLen)
+
     val io = IO(new Bundle {
         val gprReadPort = Flipped(new GeneralPurposeRegisterFile.ReadPort(xLen))
         val csrReadPort1 = Flipped(new ControlAndStatusRegisterFile.ReadPort(xLen))

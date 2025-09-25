@@ -4,20 +4,23 @@ import chisel3._
 import chisel3.util._
 
 import top.srcres258.ysyx.npc.dpi.impl.ControlAndStatusRegisterFileDPIBundle
+import top.srcres258.ysyx.npc.util.Assertion
 
 /**
-  * 处理器的控制与状态寄存器 (CSR) 文件模块
+  * 处理器的控制与状态寄存器 (CSR) 文件模块.
   */
 class ControlAndStatusRegisterFile(
     /**
-      * xLen: 操作数位数，在 RV32I 指令集中为 32
+      * xLen: 操作数位数.
       */
-    val xLen: Int = 32,
+    val xLen: Int,
     /**
-      * regAddrWidth: 寄存器 (CSR) 编号位数，在 RV32I 指令集中为 12
+      * regAddrWidth: 寄存器 (CSR) 编号位数，在 RV32I 指令集中为 12.
       */
     val regAddrWidth: Int = 12
 ) extends Module {
+    Assertion.assertProcessorXLen(xLen)
+
     val io = IO(new Bundle {
         val readPort1 = new ControlAndStatusRegisterFile.ReadPort(xLen, regAddrWidth)
         val readPort2 = new ControlAndStatusRegisterFile.ReadPort(xLen, regAddrWidth)
@@ -72,14 +75,11 @@ class ControlAndStatusRegisterFile(
 
 object ControlAndStatusRegisterFile {
     /**
-      * 定义在处理器中需要实现的 CSR 寄存器。
+      * 定义在处理器中需要实现的 CSR 寄存器.
       */
-    class RegisterBundle(
-        /**
-         * xLen: 操作数位数，在 RV32I 指令集中为 32
-         */
-        val xLen: Int = 32
-    ) extends Bundle {
+    class RegisterBundle(xLen: Int) extends Bundle {
+        Assertion.assertProcessorXLen(xLen)
+
         val mstatus = UInt(xLen.W)
         val mtvec = UInt(xLen.W)
         val mepc = UInt(xLen.W)
@@ -88,30 +88,36 @@ object ControlAndStatusRegisterFile {
     }
 
     object RegisterBundle {
-        def apply(xLen: Int = 32): RegisterBundle = {
+        def apply(xLen: Int): RegisterBundle = {
+            Assertion.assertProcessorXLen(xLen)
+
             val default = Wire(new RegisterBundle(xLen))
+
             default.mstatus := 0.U
             default.mtvec := 0.U
             default.mepc := 0.U
             default.mcause := 0.U
             default.mtval := 0.U
+
             default
         }
     }
 
     /**
-      * 寄存器文件的读取端口
+      * 寄存器文件的读取端口.
       */
     class ReadPort(
         /**
-         * xLen: 操作数位数，在 RV32I 指令集中为 32
+         * xLen: 操作数位数.
          */
-        val xLen: Int = 32,
+        xLen: Int,
         /**
-         * regAddrWidth: 寄存器 (GPR) 编号位数，在 RV32I 指令集中为 5
+         * regAddrWidth: 寄存器 (GPR) 编号位数, 在 RV32I 指令集中为 5.
          */
-        val regAddrWidth: Int = 12
+        regAddrWidth: Int = 12
     ) extends Bundle {
+        Assertion.assertProcessorXLen(xLen)
+
         val readData = Output(UInt(xLen.W))
         val readAddress = Input(UInt(regAddrWidth.W))
     }
@@ -127,18 +133,20 @@ object ControlAndStatusRegisterFile {
     }
 
     /**
-      * 寄存器文件的写入端口
+      * 寄存器文件的写入端口.
       */
     class WritePort(
         /**
-         * xLen: 操作数位数，在 RV32I 指令集中为 32
+         * xLen: 操作数位数.
          */
-        val xLen: Int = 32,
+        xLen: Int,
         /**
-         * regAddrWidth: 寄存器 (GPR) 编号位数，在 RV32I 指令集中为 5
+         * regAddrWidth: 寄存器 (GPR) 编号位数, 在 RV32I 指令集中为 5.
          */
-        val regAddrWidth: Int = 12
+        regAddrWidth: Int = 12
     ) extends Bundle {
+        Assertion.assertProcessorXLen(xLen)
+        
         val writeEnable = Input(Bool())
         val writeData = Input(UInt(xLen.W))
         val writeAddress = Input(UInt(regAddrWidth.W))
@@ -152,7 +160,7 @@ object ControlAndStatusRegisterFile {
         }
     }
 
-    /* (处理器已经实现的) CSR 编号 */
+    /* (处理器已经实现的) CSR 编号. */
 
     val CSR_MSTATUS: Int = 0x300
     val CSR_MTVEC: Int = 0x305

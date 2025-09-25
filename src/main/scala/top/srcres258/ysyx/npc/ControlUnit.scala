@@ -3,15 +3,14 @@ package top.srcres258.ysyx.npc
 import chisel3._
 import chisel3.util._
 
+import top.srcres258.ysyx.npc.util.Assertion
+
 /**
-  * 控制单元 CU
+  * 控制单元 CU.
   */
-class ControlUnit(
-    /**
-      * xLen: 操作数位数，在 RV32I 指令集中为 32
-      */
-    val xLen: Int = 32
-) extends Module {
+class ControlUnit(val xLen: Int) extends Module {
+    Assertion.assertProcessorXLen(xLen)
+    
     val io = IO(new Bundle {
         val regWriteEnable = Output(Bool())
         val csrRegWriteEnable = Output(Bool())

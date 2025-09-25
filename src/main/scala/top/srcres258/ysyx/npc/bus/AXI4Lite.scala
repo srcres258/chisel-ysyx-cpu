@@ -3,6 +3,8 @@ package top.srcres258.ysyx.npc.bus
 import chisel3._
 import chisel3.util._
 
+import top.srcres258.ysyx.npc.util.Assertion
+
 /**
   * AMBA AXI4-Lite 总线协议的 IO 接口.
   * 
@@ -10,6 +12,8 @@ import chisel3.util._
   * 需要外套 Flipped 反转 IO 方向.
   */
 class AXI4Lite(val xLen: Int) extends Bundle {
+    Assertion.assertProcessorXLen(xLen)
+
     // 协议定义的所有信道.
     /**
       * AR (读地址) 信道, 传信方向: master -> slave.
@@ -39,14 +43,18 @@ object AXI4Lite {
     /**
       * AMBA AXI4-Lite 总线协议的 AR (读地址) 信道.
       */
-    class AR(val xLen: Int) extends Bundle {
+    class AR(xLen: Int) extends Bundle {
+        Assertion.assertProcessorXLen(xLen)
+
         val addr = Output(UInt(xLen.W))
     }
 
     /**
       * AMBA AXI4-Lite 总线协议的 R (读数据) 信道.
       */
-    class R(val xLen: Int) extends Bundle {
+    class R(xLen: Int) extends Bundle {
+        Assertion.assertProcessorXLen(xLen)
+        
         val data = Input(UInt(xLen.W))
         val resp = Input(UInt(RESP_WIDTH.W))
     }
@@ -54,14 +62,18 @@ object AXI4Lite {
     /**
       * AMBA AXI4-Lite 总线协议的 AW (写地址) 信道.
       */
-    class AW(val xLen: Int) extends Bundle {
+    class AW(xLen: Int) extends Bundle {
+        Assertion.assertProcessorXLen(xLen)
+
         val addr = Output(UInt(xLen.W))
     }
 
     /**
       * AMBA AXI4-Lite 总线协议的 W (写数据) 信道.
       */
-    class W(val xLen: Int) extends Bundle {
+    class W(xLen: Int) extends Bundle {
+        Assertion.assertProcessorXLen(xLen)
+
         val strbWidth: Int = xLen / 8
 
         val data = Output(UInt(xLen.W))
@@ -71,7 +83,9 @@ object AXI4Lite {
     /**
       * AMBA AXI4-Lite 总线协议的 B (写回复) 信道.
       */
-    class B(val xLen: Int) extends Bundle {
+    class B(xLen: Int) extends Bundle {
+        Assertion.assertProcessorXLen(xLen)
+        
         val resp = Input(UInt(RESP_WIDTH.W))
     }
 

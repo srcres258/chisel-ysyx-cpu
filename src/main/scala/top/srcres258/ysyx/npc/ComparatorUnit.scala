@@ -3,30 +3,29 @@ package top.srcres258.ysyx.npc
 import chisel3._
 import chisel3.util._
 
+import top.srcres258.ysyx.npc.util.Assertion
+
 /**
-  * 比较器单元
+  * 比较器单元.
   */
-class ComparatorUnit(
-    /**
-      * xLen: 操作数位数，在 RV32I 指令集中为 32
-      */
-    val xLen: Int = 32
-) extends Module {
+class ComparatorUnit(val xLen: Int) extends Module {
+    Assertion.assertProcessorXLen(xLen)
+    
     val io = IO(new Bundle {
         /**
-          * 输出：比较结果
+          * 输出: 比较结果.
           */
         val comp = Output(Bool())
         /**
-          * 输入：比较操作数 A
+          * 输入: 比较操作数 A.
           */
         val compPortA = Input(UInt(xLen.W))
         /**
-          * 输入：比较操作数 B
+          * 输入: 比较操作数 B.
           */
         val compPortB = Input(UInt(xLen.W))
         /**
-          * 输入：比较操作类型选择器
+          * 输入: 比较操作类型选择器.
           */
         val compOpSel = Input(UInt(ComparatorUnit.COMP_OP_SEL_LEN.W))
     })
@@ -44,7 +43,7 @@ class ComparatorUnit(
 
 object ComparatorUnit {
     /**
-      * 比较操作类型选择器的位宽
+      * 比较操作类型选择器的位宽.
       */
     val COMP_OP_SEL_LEN: Int = 4
 

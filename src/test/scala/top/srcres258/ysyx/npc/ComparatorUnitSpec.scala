@@ -6,7 +6,7 @@ import chisel3.simulator.scalatest.ChiselSim
 class ComparatorUnitSpec extends AnyFunSpec with ChiselSim {
     describe("ComparatorUnit") {
         it("main") {
-            simulate(new ComparatorUnit) { top =>
+            simulate(new ComparatorUnit(32)) { top =>
                 val clock = top.clock
 
                 val comp = top.io.comp

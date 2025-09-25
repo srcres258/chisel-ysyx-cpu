@@ -5,17 +5,14 @@ import chisel3.util._
 
 import top.srcres258.ysyx.npc.ControlUnit
 import top.srcres258.ysyx.npc.ProcessorCore
-import os.group.set
+import top.srcres258.ysyx.npc.util.Assertion
 
 /**
-  * 从 MA 阶段到 WB 阶段所需流转的数据。
+  * 从 MA 阶段到 WB 阶段所需流转的数据.
   */
-class MA_WB_Bundle(
-    /**
-      * xLen: 处理器位数，在 RV32I 指令集中为 32
-      */
-    xLen: Int = 32
-) extends StageUnitBundle(xLen) {
+class MA_WB_Bundle(xLen: Int) extends StageUnitBundle(xLen) {
+    Assertion.assertProcessorXLen(xLen)
+
     val pcCur = UInt(xLen.W)
     val pcNext = UInt(xLen.W)
     val pcTarget = UInt(xLen.W)
@@ -63,7 +60,9 @@ object MA_WB_Bundle {
         bundle.ecallEnable := false.B
     }
 
-    def apply(xLen: Int = 32): MA_WB_Bundle = {
+    def apply(xLen: Int): MA_WB_Bundle = {
+        Assertion.assertProcessorXLen(xLen)
+
         val default = Wire(new MA_WB_Bundle(xLen))
 
         setDefaultValues(default)

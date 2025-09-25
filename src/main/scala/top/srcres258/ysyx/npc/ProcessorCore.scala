@@ -15,9 +15,10 @@ import top.srcres258.ysyx.npc.util.DecoupledIOConnect
 import top.srcres258.ysyx.npc.dpi.impl._
 import top.srcres258.ysyx.npc.bus.AXI4Lite
 import top.srcres258.ysyx.npc.arbiter.RoundRobinArbiter
+import top.srcres258.ysyx.npc.util.Assertion
 
 /**
-  * RV32I 单周期处理器核心
+  * RV32I 单周期处理器核心/
   */
 class ProcessorCore(
     /**
@@ -28,11 +29,11 @@ class ProcessorCore(
       */
     enableDPI: Boolean,
     /**
-      * 处理器字长. 32 位 RISC-V ISA 下默认为 32.
+      * 处理器字长.
       */
-    val xLen: Int = 32
+    val xLen: Int
 ) extends Module {
-    require(xLen == 32 || xLen == 64, "Only 32-bit or 64-bit processor core is supported.")
+    Assertion.assertProcessorXLen(xLen)
 
     val executing = RegInit(false.B)
 
@@ -182,7 +183,8 @@ object ProcessorCore extends App {
             "--firtool-option", "-lowering-options=disallowLocalVariables"
         ),
         Seq(ChiselGeneratorAnnotation(() => new ProcessorCore(
-            args.length > 0 && args(0) == "enableDPI"
+            args.length > 0 && args(0) == "enableDPI",
+            xLen = 32 // 32 位 RISC-V ISA, 处理器字长为 32.
         )))
     )
 }

@@ -2,36 +2,41 @@ package top.srcres258.ysyx.npc
 
 import chisel3._
 import chisel3.util._
+
 import scala.collection.mutable.ListBuffer
 
+import top.srcres258.ysyx.npc.util.Assertion
+
 /**
-  * 算术逻辑单元 ALU
+  * 算术逻辑单元 ALU.
   */
 class ArithmeticLogicUnit(
     /**
-      * xLen: 操作数位数，在 RV32I 指令集中为 32
+      * xLen: 操作数位数.
       */
-    val xLen: Int = 32,
+    val xLen: Int,
     /**
-      * regAddrWidth: 寄存器编号位数，在 RV32I 指令集中为 5
+      * regAddrWidth: 寄存器编号位数, 在 RV32I 指令集中为 5.
       */
     val regAddrWidth: Int = 5
 ) extends Module {
+    Assertion.assertProcessorXLen(xLen)
+
     val io = IO(new Bundle {
         /**
-          * 输出：ALU 计算结果
+          * 输出: ALU 计算结果.
           */
         val alu = Output(UInt(xLen.W))
         /**
-          * 输入：ALU 操作数 A
+          * 输入: ALU 操作数 A.
           */
         val aluPortA = Input(UInt(xLen.W))
         /**
-          * 输入：ALU 操作数 B
+          * 输入: ALU 操作数 B.
           */
         val aluPortB = Input(UInt(xLen.W))
         /**
-          * 输入：ALU 操作类型选择器
+          * 输入: ALU 操作类型选择器.
           */
         val aluSel = Input(UInt(ArithmeticLogicUnit.ALU_SEL_LEN.W))
     })
@@ -51,7 +56,7 @@ class ArithmeticLogicUnit(
 
 object ArithmeticLogicUnit {
     /**
-      * ALU 操作类型选择器的位宽
+      * ALU 操作类型选择器的位宽.
       */
     val ALU_SEL_LEN: Int = 4
 

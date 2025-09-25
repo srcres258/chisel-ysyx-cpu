@@ -7,16 +7,14 @@ import top.srcres258.ysyx.npc.dpi.impl.IFUnitDPIBundle
 import top.srcres258.ysyx.npc.PhysicalRAM
 import top.srcres258.ysyx.npc.bus.AXI4Lite
 import top.srcres258.ysyx.npc.arbiter.RoundRobinArbiter
+import top.srcres258.ysyx.npc.util.Assertion
 
 /**
-  * 处理器的取指 (Instruction Fetch) 单元。
+  * 处理器的取指 (Instruction Fetch) 单元.
   */
-class IFUnit(
-    /**
-      * xLen: 处理器位数，在 RV32I 指令集中为 32
-      */
-    val xLen: Int = 32
-) extends Module {
+class IFUnit(val xLen: Int) extends Module {
+    Assertion.assertProcessorXLen(xLen)
+
     val io = IO(new Bundle {
         val executionInfo = Flipped(Decoupled(Flipped(new IFUnit.ExecutionInfo(xLen))))
         val ramBus = new AXI4Lite(xLen)
@@ -123,6 +121,8 @@ class IFUnit(
 
 object IFUnit {
     class ExecutionInfo(val xLen: Int) extends Bundle {
+        Assertion.assertProcessorXLen(xLen)
+        
         val pc = Input(UInt(xLen.W))
     }
 }

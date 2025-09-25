@@ -4,16 +4,14 @@ import chisel3._
 import chisel3.util._
 
 import top.srcres258.ysyx.npc.dpi.impl.UPCUnitDPIBundle
+import top.srcres258.ysyx.npc.util.Assertion
 
 /**
-  * 处理器的更新程序计数器 (Update Program Counter) 单元。
+  * 处理器的更新程序计数器 (Update Program Counter) 单元.
   */
-class UPCUnit(
-    /**
-      * xLen: 处理器位数，在 RV32I 指令集中为 32
-      */
-    val xLen: Int = 32
-) extends Module {
+class UPCUnit(val xLen: Int) extends Module {
+    Assertion.assertProcessorXLen(xLen)
+    
     val io = IO(new Bundle {
         val pcOutput = Decoupled(Output(UInt(xLen.W)))
 

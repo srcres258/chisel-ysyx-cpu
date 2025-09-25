@@ -6,7 +6,7 @@ import chisel3.simulator.scalatest.ChiselSim
 class ImmediateSignExtendSpec extends AnyFunSpec with ChiselSim {
     describe("ArithmeticLogicUnit") {
         it("main") {
-            simulate(new ImmediateSignExtend) { top =>
+            simulate(new ImmediateSignExtend(32)) { top =>
                 val clock = top.clock
 
                 val immOut = top.io.immOut

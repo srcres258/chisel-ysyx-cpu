@@ -3,16 +3,14 @@ package top.srcres258.ysyx.npc
 import chisel3._
 import chisel3.util._
 
+import top.srcres258.ysyx.npc.util.Assertion
+
 /**
-  * 立即数符号扩展模块，用于将各类型的指令数据中的立即数进行符号扩展
-  * （若该指令类型的结构中包含立即数）
+  * 立即数符号扩展模块, 用于将各类型的指令数据中的立即数进行符号扩展 (若该指令类型的结构中包含立即数).
   */
-class ImmediateSignExtend(
-    /**
-      * xLen: 操作数位数，在 RV32I 指令集中为 32
-      */
-    val xLen: Int = 32
-) extends Module {
+class ImmediateSignExtend(val xLen: Int) extends Module {
+    Assertion.assertProcessorXLen(xLen)
+    
     val io = IO(new Bundle {
         val immOut = Output(UInt(xLen.W))
         val inst = Input(UInt(xLen.W))

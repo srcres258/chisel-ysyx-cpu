@@ -6,7 +6,7 @@ import chisel3.simulator.scalatest.ChiselSim
 class ArithmeticLogicUnitSpec extends AnyFunSpec with ChiselSim {
     describe("ArithmeticLogicUnit") {
         it("main") {
-            simulate(new ArithmeticLogicUnit) { top =>
+            simulate(new ArithmeticLogicUnit(32)) { top =>
                 val clock = top.clock
 
                 val aluPortA = top.io.aluPortA

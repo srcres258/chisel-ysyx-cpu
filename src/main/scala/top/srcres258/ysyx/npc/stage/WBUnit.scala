@@ -7,16 +7,14 @@ import top.srcres258.ysyx.npc.ControlUnit
 import top.srcres258.ysyx.npc.regfile.GeneralPurposeRegisterFile
 import top.srcres258.ysyx.npc.regfile.ControlAndStatusRegisterFile
 import top.srcres258.ysyx.npc.dpi.impl.WBUnitDPIBundle
+import top.srcres258.ysyx.npc.util.Assertion
 
 /**
-  * 处理器的写回 (Write Back) 单元。
+  * 处理器的写回 (Write Back) 单元.
   */
-class WBUnit(
-    /**
-      * xLen: 处理器位数，在 RV32I 指令集中为 32
-      */
-    val xLen: Int = 32
-) extends Module {
+class WBUnit(val xLen: Int) extends Module {
+    Assertion.assertProcessorXLen(xLen)
+
     val io = IO(new Bundle {
         val gprWritePort = Flipped(new GeneralPurposeRegisterFile.WritePort(xLen))
         val csrWritePort1 = Flipped(new ControlAndStatusRegisterFile.WritePort(xLen))

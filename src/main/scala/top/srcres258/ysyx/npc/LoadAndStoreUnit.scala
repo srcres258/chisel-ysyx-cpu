@@ -3,15 +3,14 @@ package top.srcres258.ysyx.npc
 import chisel3._
 import chisel3.util._
 
+import top.srcres258.ysyx.npc.util.Assertion
+
 /**
-  * 访存单元
+  * 访存单元.
   */
-class LoadAndStoreUnit(
-    /**
-      * xLen: 操作数位数，在 RV32I 指令集中为 32
-      */
-    val xLen: Int = 32
-) extends Module {
+class LoadAndStoreUnit(val xLen: Int) extends Module {
+    Assertion.assertProcessorXLen(xLen)
+    
     val dataStrobeLen: Int = xLen / 8
 
     val io = IO(new Bundle {

@@ -5,21 +5,19 @@ import chisel3.util._
 
 import top.srcres258.ysyx.npc.LoadAndStoreUnit
 import top.srcres258.ysyx.npc.ControlUnit
+import top.srcres258.ysyx.npc.util.Assertion
 
 /**
-  * 从 EX 阶段到 MA 阶段所需流转的数据。
+  * 从 EX 阶段到 MA 阶段所需流转的数据.
   */
-class EX_MA_Bundle(
-    /**
-      * xLen: 处理器位数，在 RV32I 指令集中为 32
-      */
-    xLen: Int = 32
-) extends StageUnitBundle(xLen) {
+class EX_MA_Bundle(xLen: Int) extends StageUnitBundle(xLen) {
+    Assertion.assertProcessorXLen(xLen)
+
     val pcCur = UInt(xLen.W)
     val pcNext = UInt(xLen.W)
     val pcTarget = UInt(xLen.W)
-    // 注：由于分支目标地址本身也经 ALU 计算，所以当分支启用时，
-    // aluOutput 中存的就是分支目标地址。
+    // 注: 由于分支目标地址本身也经 ALU 计算, 所以当分支启用时,
+    // aluOutput 中存的就是分支目标地址.
     val aluOutput = UInt(xLen.W)
     val compBranchEnable = Bool()
     val rs1Data = UInt(xLen.W) // rs1Data 需继续传递至 WB 阶段 (CSR 写入操作需要用到)
@@ -75,7 +73,9 @@ object EX_MA_Bundle {
         bundle.inst_jalr := false.B
     }
 
-    def apply(xLen: Int = 32): EX_MA_Bundle = {
+    def apply(xLen: Int): EX_MA_Bundle = {
+        Assertion.assertProcessorXLen(xLen)
+
         val default = Wire(new EX_MA_Bundle(xLen))
 
         setDefaultValues(default)

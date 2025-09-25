@@ -6,16 +6,14 @@ import chisel3.util._
 import top.srcres258.ysyx.npc.dpi.impl.PhysicalRAMDPIBundle
 import top.srcres258.ysyx.npc.bus.AXI4Lite
 import top.srcres258.ysyx.npc.arbiter.RoundRobinArbiter
+import top.srcres258.ysyx.npc.util.Assertion
 
 /**
-  * 物理内存 RAM 模块
+  * 物理内存 RAM 模块.
   */
-class PhysicalRAM(
-    /**
-      * 处理器字长. 32 位 RISC-V ISA 下默认为 32.
-      */
-    val xLen: Int = 32
-) extends Module {
+class PhysicalRAM(val xLen: Int) extends Module {
+    Assertion.assertProcessorXLen(xLen)
+    
     val io = IO(new Bundle {
         val busPorts = Vec(PhysicalRAM.ARBITER_MAX_MASTER_AMOUNT, Flipped(new AXI4Lite(xLen)))
         val arbiter = new RoundRobinArbiter.IOBundle(PhysicalRAM.ARBITER_MAX_MASTER_AMOUNT)

@@ -8,16 +8,14 @@ import top.srcres258.ysyx.npc.dpi.impl.MAUnitDPIBundle
 import top.srcres258.ysyx.npc.PhysicalRAM
 import top.srcres258.ysyx.npc.bus.AXI4Lite
 import top.srcres258.ysyx.npc.arbiter.RoundRobinArbiter
+import top.srcres258.ysyx.npc.util.Assertion
 
 /**
-  * 处理器的访存 (Memory Access) 单元。
+  * 处理器的访存 (Memory Access) 单元.
   */
-class MAUnit(
-    /**
-      * xLen: 处理器位数，在 RV32I 指令集中为 32
-      */
-    val xLen: Int = 32
-) extends Module {
+class MAUnit(val xLen: Int) extends Module {
+    Assertion.assertProcessorXLen(xLen)
+    
     val io = IO(new Bundle {
         val ramBus = new AXI4Lite(xLen)
         val arbiterReq = Output(Bool())

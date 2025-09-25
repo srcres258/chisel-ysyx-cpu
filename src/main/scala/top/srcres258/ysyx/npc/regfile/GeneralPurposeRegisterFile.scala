@@ -4,20 +4,23 @@ import chisel3._
 import chisel3.util._
 
 import top.srcres258.ysyx.npc.dpi.impl.GeneralPurposeRegisterFileDPIBundle
+import top.srcres258.ysyx.npc.util.Assertion
 
 /**
-  * 处理器的通用寄存器 (GPR) 文件模块
+  * 处理器的通用寄存器 (GPR) 文件模块.
   */
 class GeneralPurposeRegisterFile(
     /**
-      * xLen: 操作数位数，在 RV32I 指令集中为 32
+      * xLen: 操作数位数.
       */
-    val xLen: Int = 32,
+    val xLen: Int,
     /**
-      * regAddrWidth: 寄存器 (GPR) 编号位数，在 RV32I 指令集中为 5
+      * regAddrWidth: 寄存器 (GPR) 编号位数，在 RV32I 指令集中为 5.
       */
     val regAddrWidth: Int = 5
 ) extends Module {
+    Assertion.assertProcessorXLen(xLen)
+
     val io = IO(new Bundle {
         val readPort = new GeneralPurposeRegisterFile.ReadPort(xLen, regAddrWidth)
         val writePort = new GeneralPurposeRegisterFile.WritePort(xLen, regAddrWidth)
@@ -38,24 +41,26 @@ class GeneralPurposeRegisterFile(
         io.dpi.gprs(i) := registers(i)
     }
 
-    registers(0.U) := 0.U // RISC-V 规范规定：x0 寄存器恒为 0
+    registers(0.U) := 0.U // RISC-V 规范规定：x0 寄存器恒为 0.
 }
 
 object GeneralPurposeRegisterFile {
     /**
-      * 寄存器文件的读取端口
+      * 寄存器文件的读取端口.
       */
     class ReadPort(
         /**
-         * xLen: 操作数位数，在 RV32I 指令集中为 32
+         * xLen: 操作数位数.
          */
-        val xLen: Int = 32,
+        xLen: Int,
         /**
-         * regAddrWidth: 寄存器 (GPR) 编号位数，在 RV32I 指令集中为 5
+         * regAddrWidth: 寄存器 (GPR) 编号位数, 在 RV32I 指令集中为 5.
          */
-        val regAddrWidth: Int = 5
+        regAddrWidth: Int = 5
     ) extends Bundle {
-        // 提供两个读取端口 (考虑到 RISC-V 的 R 型指令需要同时读取两个寄存器)
+        Assertion.assertProcessorXLen(xLen)
+
+        // 提供两个读取端口 (考虑到 RISC-V 的 R 型指令需要同时读取两个寄存器).
         val readData1 = Output(UInt(xLen.W))
         val readData2 = Output(UInt(xLen.W))
         val readAddress1 = Input(UInt(regAddrWidth.W))
@@ -75,18 +80,20 @@ object GeneralPurposeRegisterFile {
     }
 
     /**
-      * 寄存器文件的写入端口
+      * 寄存器文件的写入端口.
       */
     class WritePort(
         /**
-         * xLen: 操作数位数，在 RV32I 指令集中为 32
+         * xLen: 操作数位数.
          */
-        val xLen: Int = 32,
+        xLen: Int,
         /**
-         * regAddrWidth: 寄存器 (GPR) 编号位数，在 RV32I 指令集中为 5
+         * regAddrWidth: 寄存器 (GPR) 编号位数, 在 RV32I 指令集中为 5.
          */
-        val regAddrWidth: Int = 5
+        regAddrWidth: Int = 5
     ) extends Bundle {
+        Assertion.assertProcessorXLen(xLen)
+
         val writeEnable = Input(Bool())
         val writeData = Input(UInt(xLen.W))
         val writeAddress = Input(UInt(regAddrWidth.W))

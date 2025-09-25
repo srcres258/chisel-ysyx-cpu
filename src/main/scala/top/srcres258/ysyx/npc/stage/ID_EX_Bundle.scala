@@ -7,17 +7,14 @@ import top.srcres258.ysyx.npc.ArithmeticLogicUnit
 import top.srcres258.ysyx.npc.ComparatorUnit
 import top.srcres258.ysyx.npc.LoadAndStoreUnit
 import top.srcres258.ysyx.npc.ControlUnit
-import os.group.set
+import top.srcres258.ysyx.npc.util.Assertion
 
 /**
-  * 从 ID 阶段到 EX 阶段所需流转的数据。
+  * 从 ID 阶段到 EX 阶段所需流转的数据.
   */
-class ID_EX_Bundle(
-    /**
-      * xLen: 处理器位数，在 RV32I 指令集中为 32
-      */
-    xLen: Int = 32
-) extends StageUnitBundle(xLen) {
+class ID_EX_Bundle(xLen: Int) extends StageUnitBundle(xLen) {
+    Assertion.assertProcessorXLen(xLen)
+
     val pcCur = UInt(xLen.W)
     val pcNext = UInt(xLen.W)
     val rs1Data = UInt(xLen.W)
@@ -90,7 +87,9 @@ object ID_EX_Bundle {
         bundle.inst_jalr := false.B
     }
 
-    def apply(xLen: Int = 32): ID_EX_Bundle = {
+    def apply(xLen: Int): ID_EX_Bundle = {
+        Assertion.assertProcessorXLen(xLen)
+
         val default = Wire(new ID_EX_Bundle(xLen))
 
         setDefaultValues(default)

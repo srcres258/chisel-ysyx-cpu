@@ -7,16 +7,14 @@ import top.srcres258.ysyx.npc.ArithmeticLogicUnit
 import top.srcres258.ysyx.npc.ComparatorUnit
 import top.srcres258.ysyx.npc.PCTargetController
 import top.srcres258.ysyx.npc.dpi.impl.EXUnitDPIBundle
+import top.srcres258.ysyx.npc.util.Assertion
 
 /**
-  * 处理器的执行 (Execute) 单元。
+  * 处理器的执行 (Execute) 单元.
   */
-class EXUnit(
-    /**
-      * xLen: 处理器位数，在 RV32I 指令集中为 32
-      */
-    val xLen: Int = 32
-) extends Module {
+class EXUnit(val xLen: Int) extends Module {
+    Assertion.assertProcessorXLen(xLen)
+
     val io = IO(new Bundle {
         val prevStage = Flipped(Decoupled(Output(new ID_EX_Bundle(xLen))))
         val nextStage = Decoupled(Output(new EX_MA_Bundle(xLen)))

@@ -3,15 +3,14 @@ package top.srcres258.ysyx.npc
 import chisel3._
 import chisel3.util._
 
+import top.srcres258.ysyx.npc.util.Assertion
+
 /**
-  * 程序计数器目标地址控制器，控制程序计数器的下一个地址
+  * 程序计数器目标地址控制器, 控制程序计数器的下一个地址.
   */
-class PCTargetController(
-    /**
-      * xLen: 操作数位数，在 RV32I 指令集中为 32
-      */
-    val xLen: Int = 32
-) extends Module {
+class PCTargetController(val xLen: Int) extends Module {
+    Assertion.assertProcessorXLen(xLen)
+    
     val io = IO(new Bundle {
         val cuJumpEnable = Input(Bool())
         val cuJumpType = Input(UInt(ControlUnit.JUMP_TYPE_LEN.W))

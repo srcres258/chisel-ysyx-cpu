@@ -6,7 +6,7 @@ import chisel3.simulator.scalatest.ChiselSim
 class ControlUnitSpec extends AnyFunSpec with ChiselSim {
     describe("ControlUnit") {
         it("main") {
-            simulate(new ControlUnit) { top =>
+            simulate(new ControlUnit(32)) { top =>
                 val clock = top.clock
 
                 // outputs
