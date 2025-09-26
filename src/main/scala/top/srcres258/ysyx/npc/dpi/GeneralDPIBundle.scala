@@ -13,6 +13,7 @@ class GeneralDPIBundle(xLen: Int) extends DPIBundle {
 
     val core = new ProcessorCoreDPIBundle(xLen)
     val physicalRAM = new PhysicalRAMDPIBundle(xLen)
+    val uart = new UARTDPIBundle(xLen)
     val gpr = new GeneralPurposeRegisterFileDPIBundle(xLen)
     val csr = new ControlAndStatusRegisterFileDPIBundle(xLen)
 

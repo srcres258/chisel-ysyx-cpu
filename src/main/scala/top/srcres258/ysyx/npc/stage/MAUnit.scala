@@ -5,7 +5,6 @@ import chisel3.util._
 
 import top.srcres258.ysyx.npc.LoadAndStoreUnit
 import top.srcres258.ysyx.npc.dpi.impl.MAUnitDPIBundle
-import top.srcres258.ysyx.npc.PhysicalRAM
 import top.srcres258.ysyx.npc.bus.AXI4Lite
 import top.srcres258.ysyx.npc.arbiter.RoundRobinArbiter
 import top.srcres258.ysyx.npc.util.Assertion
@@ -54,20 +53,20 @@ class MAUnit(val xLen: Int) extends Module {
     
     状态流转方式:
       读事务分支:       +-> 3 -> 4 -> 5      --+
-    1 (初始状态) -> 2 --+----+-----------------+-> 9 -> 10 -> 1 -> ...
+    1 (初始状态) -> 2 --+----------------------+-> 9 -> 10 -> 1 -> ...
       写事务分支:       +-> 3 -> 6 -> 7 -> 8 --+
 
     各状态之间所处理的事务:
     1 -> 2:
         等待一个时钟周期, 让上游数据平稳传递后再处理.
         (防止因为数据还没到达就处理, 造成使用错误的数据处理事务.)
-    2 -> 3 或 10:
+    2 -> 3 或 9:
         1. 回复上游 EX 单元的传递数据请求.
         2. 取出来自 EX 单元的数据, 对数据用组合逻辑进行处理, 为主存的读写事务准备数据,
            并得到 读事务 / 写事务 的判断信号.
-        3. 根据判断信号, 流转到状态 3 或状态 10.
+        3. 根据判断信号, 流转到状态 3 或状态 9.
            (1) 若流转到状态 3, 还需要向仲裁器写入 req 信号.
-           (2) 若流转到状态 10, 还需要将跳过寄存器置高电平, 以表示本轮操作无事务处理,
+           (2) 若流转到状态 9, 还需要将跳过寄存器置高电平, 以表示本轮操作无事务处理,
                仅将已有数据传递给下一处理器阶段.
     3 -> 4 或 6: (读事务分支) (写事务分支)
         根据 读事务 / 写事务 的判断信号, 流转到状态 4 或状态 6.

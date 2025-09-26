@@ -17,6 +17,11 @@ import top.srcres258.ysyx.npc.bus.AXI4Lite
 import top.srcres258.ysyx.npc.arbiter.RoundRobinArbiter
 import top.srcres258.ysyx.npc.util.Assertion
 import top.srcres258.ysyx.npc.dpi.dummy.DummyPhysicalRAM
+import top.srcres258.ysyx.npc.xbar.AXI4LiteXbar
+import top.srcres258.ysyx.npc.device.PhysicalRAM
+import top.srcres258.ysyx.npc.util.MemoryRange
+import top.srcres258.ysyx.npc.device.UART
+import top.srcres258.ysyx.npc.dpi.dummy.DummyUART
 
 /**
   * RV32I 单周期处理器核心/
@@ -48,23 +53,37 @@ class ProcessorCore(
     ControlAndStatusRegisterFile.defaultValuesForMaster(csrFile)
 
     val physicalRAM = Module(new PhysicalRAM(xLen))
-    for (i <- 0 until PhysicalRAM.ARBITER_MAX_MASTER_AMOUNT) {
-        AXI4Lite.defaultValuesForMaster(physicalRAM.io.busPorts(i))
+    AXI4Lite.defaultValuesForMaster(physicalRAM.io.bus)
+
+    val uart = Module(new UART(xLen))
+    AXI4Lite.defaultValuesForMaster(uart.io.bus)
+
+    val xbar = Module(new AXI4LiteXbar(
+        xLen,
+        Seq(
+            MemoryRange(ProcessorCore.PHYS_MEMORY_OFFSET, ProcessorCore.PHYS_MEMORY_OFFSET + ProcessorCore.PHYS_MEMORY_SIZE - 1),
+            MemoryRange(ProcessorCore.UART_MEMORY_OFFSET, ProcessorCore.UART_MEMORY_OFFSET + ProcessorCore.UART_MEMORY_SIZE - 1)
+        )
+    ))
+    for (i <- 0 until AXI4LiteXbar.ARBITER_MAX_MASTER_AMOUNT) {
+        AXI4Lite.defaultValuesForMaster(xbar.io.busPorts(i))
     }
-    RoundRobinArbiter.IOBundle.defaultValuesForMaster(physicalRAM.io.arbiter)
+    RoundRobinArbiter.IOBundle.defaultValuesForMaster(xbar.io.arbiter)
+    xbar.io.deviceBuses(0) <> physicalRAM.io.bus
+    xbar.io.deviceBuses(1) <> uart.io.bus
 
     val ifu = Module(new IFUnit(xLen))
     ifu.io.executionInfo.bits.pc := pc_r
     when(!executing && ifu.io.nextStage.fire) {
         executing := true.B
     }
-    ifu.io.executionInfo.valid := !executing
+    ifu.io.executionInfo.valid := !reset.asBool && !executing
     when(ifu.io.working) {
-        physicalRAM.io.arbiter.req(PhysicalRAM.ARBITER_MASTER_IDX_IF_UNIT) := ifu.io.arbiterReq
-        physicalRAM.io.arbiter.release(PhysicalRAM.ARBITER_MASTER_IDX_IF_UNIT).valid := ifu.io.arbiterRelease
-        ifu.io.arbiterGranted := physicalRAM.io.arbiter.grantIdx === PhysicalRAM.ARBITER_MASTER_IDX_IF_UNIT.U
-        ifu.io.arbiterReleaseReady := physicalRAM.io.arbiter.release(PhysicalRAM.ARBITER_MASTER_IDX_IF_UNIT).ready
-        ifu.io.ramBus <> physicalRAM.io.busPorts(PhysicalRAM.ARBITER_MASTER_IDX_IF_UNIT)
+        xbar.io.arbiter.req(AXI4LiteXbar.ARBITER_MASTER_IDX_IF_UNIT) := ifu.io.arbiterReq
+        xbar.io.arbiter.release(AXI4LiteXbar.ARBITER_MASTER_IDX_IF_UNIT).valid := ifu.io.arbiterRelease
+        ifu.io.arbiterGranted := xbar.io.arbiter.grantIdx === AXI4LiteXbar.ARBITER_MASTER_IDX_IF_UNIT.U
+        ifu.io.arbiterReleaseReady := xbar.io.arbiter.release(AXI4LiteXbar.ARBITER_MASTER_IDX_IF_UNIT).ready
+        ifu.io.ramBus <> xbar.io.busPorts(AXI4LiteXbar.ARBITER_MASTER_IDX_IF_UNIT)
     }.otherwise {
         ifu.io.arbiterGranted := false.B
         ifu.io.arbiterReleaseReady := false.B
@@ -91,11 +110,11 @@ class ProcessorCore(
     val mau = Module(new MAUnit(xLen))
     DecoupledIOConnect(exu.io.nextStage, mau.io.prevStage, DecoupledIOConnect.Pipeline)
     when(mau.io.working) {
-        physicalRAM.io.arbiter.req(PhysicalRAM.ARBITER_MASTER_IDX_MA_UNIT) := mau.io.arbiterReq
-        physicalRAM.io.arbiter.release(PhysicalRAM.ARBITER_MASTER_IDX_MA_UNIT).valid := mau.io.arbiterRelease
-        mau.io.arbiterGranted := physicalRAM.io.arbiter.grantIdx === PhysicalRAM.ARBITER_MASTER_IDX_MA_UNIT.U
-        mau.io.arbiterReleaseReady := physicalRAM.io.arbiter.release(PhysicalRAM.ARBITER_MASTER_IDX_MA_UNIT).ready
-        mau.io.ramBus <> physicalRAM.io.busPorts(PhysicalRAM.ARBITER_MASTER_IDX_MA_UNIT)
+        xbar.io.arbiter.req(AXI4LiteXbar.ARBITER_MASTER_IDX_MA_UNIT) := mau.io.arbiterReq
+        xbar.io.arbiter.release(AXI4LiteXbar.ARBITER_MASTER_IDX_MA_UNIT).valid := mau.io.arbiterRelease
+        mau.io.arbiterGranted := xbar.io.arbiter.grantIdx === AXI4LiteXbar.ARBITER_MASTER_IDX_MA_UNIT.U
+        mau.io.arbiterReleaseReady := xbar.io.arbiter.release(AXI4LiteXbar.ARBITER_MASTER_IDX_MA_UNIT).ready
+        mau.io.ramBus <> xbar.io.busPorts(AXI4LiteXbar.ARBITER_MASTER_IDX_MA_UNIT)
     }.otherwise {
         mau.io.arbiterGranted := false.B
         mau.io.arbiterReleaseReady := false.B
@@ -134,6 +153,7 @@ class ProcessorCore(
     generalDPI.core.ifuInputValid := !executing
 
     generalDPI.physicalRAM <> physicalRAM.io.dpi
+    generalDPI.uart <> uart.io.dpi
     generalDPI.gpr <> gprFile.io.dpi
     generalDPI.csr <> csrFile.io.dpi
 
@@ -153,11 +173,21 @@ class ProcessorCore(
     } else {
         val dummyPhysicalRAM = Module(new DummyPhysicalRAM(xLen))
         dummyPhysicalRAM.io.dpi <> generalDPI.physicalRAM
+        val dummyUART = Module(new DummyUART(xLen))
+        dummyUART.io.dpi <> generalDPI.uart
     }
 }
 
 object ProcessorCore extends App {
-    val PC_INITIAL_VAL: UInt = "h80000000".U(32.W)
+    val XLEN: Int = 32 // 32 位 RISC-V ISA, 处理器字长为 32.
+
+    val PHYS_MEMORY_OFFSET: BigInt = BigInt(0x80000000L)
+    val PHYS_MEMORY_SIZE: BigInt = BigInt(1024L * 1024L * 128L)
+
+    val UART_MEMORY_OFFSET: BigInt = BigInt(0x10000000L)
+    val UART_MEMORY_SIZE: BigInt = BigInt(0x1000L)
+
+    val PC_INITIAL_VAL: UInt = PHYS_MEMORY_OFFSET.U(XLEN.W)
 
     /* 
     处理器执行的 6 个阶段: (每个阶段各耗时一个时钟周期)
@@ -186,8 +216,8 @@ object ProcessorCore extends App {
             "--firtool-option", "-lowering-options=disallowLocalVariables"
         ),
         Seq(ChiselGeneratorAnnotation(() => new ProcessorCore(
-            args.length > 0 && args(0) == "enableDPIAdapter",
-            xLen = 32 // 32 位 RISC-V ISA, 处理器字长为 32.
+            enableDPIAdapter = args.contains("enableDPIAdapter"),
+            xLen = XLEN
         )))
     )
 }

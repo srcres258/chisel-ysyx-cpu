@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 
 import top.srcres258.ysyx.npc.dpi.impl.IFUnitDPIBundle
-import top.srcres258.ysyx.npc.PhysicalRAM
+import top.srcres258.ysyx.npc.device.PhysicalRAM
 import top.srcres258.ysyx.npc.bus.AXI4Lite
 import top.srcres258.ysyx.npc.arbiter.RoundRobinArbiter
 import top.srcres258.ysyx.npc.util.Assertion

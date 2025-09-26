@@ -39,6 +39,7 @@ class AXI4Lite(val xLen: Int) extends Bundle {
 
 object AXI4Lite {
     val RESP_WIDTH: Int = 2
+    val RESP_DECERR: Int = 0b011
 
     /**
       * AMBA AXI4-Lite 总线协议的 AR (读地址) 信道.
