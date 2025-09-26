@@ -169,10 +169,10 @@ class AXI4LiteXbar(
         }
     }
 
-    private def judgeAddrValid(addr: UInt): Bool = deviceMemoryRanges
+    private def judgeAddrValid(addr: UInt): Bool = deviceMemoryRanges.reverse
         .map(_.isInRange(addr)).reduce(_ || _)
     private def selectDeviceIdx(addr: UInt): UInt = MuxCase(
-        0.U, deviceMemoryRanges.zipWithIndex.map((item) => item._1.isInRange(addr) -> item._2.U)
+        0.U, deviceMemoryRanges.zipWithIndex.reverse.map((item) => item._1.isInRange(addr) -> item._2.U)
     )
     addrValid := judgeAddrValid(addr)
     curDeviceBusIdx := selectDeviceIdx(addr)

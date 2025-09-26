@@ -22,9 +22,11 @@ import top.srcres258.ysyx.npc.device.PhysicalRAM
 import top.srcres258.ysyx.npc.util.MemoryRange
 import top.srcres258.ysyx.npc.device.UART
 import top.srcres258.ysyx.npc.dpi.dummy.DummyUART
+import top.srcres258.ysyx.npc.device.CLINT
+import top.srcres258.ysyx.npc.dpi.dummy.DummyCLINT
 
 /**
-  * RV32I 单周期处理器核心/
+  * RV32I 单周期处理器核心.
   */
 class ProcessorCore(
     /**
@@ -58,11 +60,15 @@ class ProcessorCore(
     val uart = Module(new UART(xLen))
     AXI4Lite.defaultValuesForMaster(uart.io.bus)
 
+    val clint = Module(new CLINT(xLen))
+    AXI4Lite.defaultValuesForMaster(clint.io.bus)
+
     val xbar = Module(new AXI4LiteXbar(
         xLen,
         Seq(
-            MemoryRange(ProcessorCore.PHYS_MEMORY_OFFSET, ProcessorCore.PHYS_MEMORY_OFFSET + ProcessorCore.PHYS_MEMORY_SIZE - 1),
-            MemoryRange(ProcessorCore.UART_MEMORY_OFFSET, ProcessorCore.UART_MEMORY_OFFSET + ProcessorCore.UART_MEMORY_SIZE - 1)
+            MemoryRange.ofSize(ProcessorCore.PHYS_MEMORY_OFFSET, ProcessorCore.PHYS_MEMORY_SIZE),
+            MemoryRange.ofSize(ProcessorCore.UART_MEMORY_OFFSET, ProcessorCore.UART_MEMORY_SIZE),
+            MemoryRange.ofSize(ProcessorCore.CLINT_MEMORY_OFFSET, ProcessorCore.CLINT_MEMORY_SIZE)
         )
     ))
     for (i <- 0 until AXI4LiteXbar.ARBITER_MAX_MASTER_AMOUNT) {
@@ -71,6 +77,7 @@ class ProcessorCore(
     RoundRobinArbiter.IOBundle.defaultValuesForMaster(xbar.io.arbiter)
     xbar.io.deviceBuses(0) <> physicalRAM.io.bus
     xbar.io.deviceBuses(1) <> uart.io.bus
+    xbar.io.deviceBuses(2) <> clint.io.bus
 
     val ifu = Module(new IFUnit(xLen))
     ifu.io.executionInfo.bits.pc := pc_r
@@ -154,6 +161,7 @@ class ProcessorCore(
 
     generalDPI.physicalRAM <> physicalRAM.io.dpi
     generalDPI.uart <> uart.io.dpi
+    generalDPI.clint <> clint.io.dpi
     generalDPI.gpr <> gprFile.io.dpi
     generalDPI.csr <> csrFile.io.dpi
 
@@ -175,6 +183,8 @@ class ProcessorCore(
         dummyPhysicalRAM.io.dpi <> generalDPI.physicalRAM
         val dummyUART = Module(new DummyUART(xLen))
         dummyUART.io.dpi <> generalDPI.uart
+        val dummyCLINT = Module(new DummyCLINT(xLen))
+        dummyCLINT.io.dpi <> generalDPI.clint
     }
 }
 
@@ -182,10 +192,18 @@ object ProcessorCore extends App {
     val XLEN: Int = 32 // 32 位 RISC-V ISA, 处理器字长为 32.
 
     val PHYS_MEMORY_OFFSET: BigInt = BigInt(0x80000000L)
-    val PHYS_MEMORY_SIZE: BigInt = BigInt(1024L * 1024L * 128L)
+    // val PHYS_MEMORY_SIZE: BigInt = BigInt(1024L * 1024L * 128L)
+    /* 
+    TODO: 目前设置这么大内存, 好让 NPC 能够直接通过 DPI-C 经由仿真环境提供的 MMIO 方式访问外设.
+    以后在 NPC 中通过 Xbar 以硬件方式把 MMIO 实现了, 需要改回上面被注释掉的代码的真实物理内存大小.
+     */
+    val PHYS_MEMORY_SIZE: BigInt = BigInt(0xb0000000L - 0x80000000L)
 
     val UART_MEMORY_OFFSET: BigInt = BigInt(0x10000000L)
     val UART_MEMORY_SIZE: BigInt = BigInt(0x1000L)
+
+    val CLINT_MEMORY_OFFSET: BigInt = BigInt(0xa0000048L)
+    val CLINT_MEMORY_SIZE: BigInt = BigInt(8)
 
     val PC_INITIAL_VAL: UInt = PHYS_MEMORY_OFFSET.U(XLEN.W)
 

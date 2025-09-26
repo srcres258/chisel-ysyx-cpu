@@ -9,3 +9,7 @@ import chisel3.util._
 case class MemoryRange(start: BigInt, end: BigInt) {
     def isInRange(addr: UInt): Bool = addr >= start.U && addr <= end.U
 }
+
+object MemoryRange {
+    def ofSize(start: BigInt, size: BigInt): MemoryRange = MemoryRange(start, start + size - 1)
+}
