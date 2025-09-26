@@ -6,6 +6,7 @@ import chisel3.util._
 import top.srcres258.ysyx.npc.bus.AXI4Lite
 import top.srcres258.ysyx.npc.dpi.impl.UARTDPIBundle
 import top.srcres258.ysyx.npc.util.Assertion
+import top.srcres258.ysyx.npc.ProcessorCore
 
 /**
   * UART 模块.
@@ -20,7 +21,9 @@ class UART(val xLen: Int) extends Module {
     })
 
     val readRoutineTimer = RegInit(0.U(UART.READ_ROUTINE_TIMER_WIDTH.W))
+    val readRoutineTimerMax = RegInit(UART.READ_ROUTINE_CLOCK_CYCLES.U(UART.READ_ROUTINE_TIMER_WIDTH.W))
     val writeRoutineTimer = RegInit(0.U(UART.WRITE_ROUTINE_TIMER_WIDTH.W))
+    val writeRoutineTimerMax = RegInit(UART.WRITE_ROUTINE_CLOCK_CYCLES.U(UART.WRITE_ROUTINE_TIMER_WIDTH.W))
     val readRoutineDone = Wire(Bool())
     val writeRoutineDone = Wire(Bool())
     val araddr = RegInit(0.U(xLen.W))
@@ -100,7 +103,7 @@ class UART(val xLen: Int) extends Module {
     bus.w.ready := state === s_write_wait_wvalid
     bus.b.valid := state === s_write_wait_bready
 
-    readRoutineDone := readRoutineTimer >= UART.READ_ROUTINE_CLOCK_CYCLES.U
+    readRoutineDone := readRoutineTimer >= readRoutineTimerMax
     io.dpi.read.readEnable := false.B
     io.dpi.read.readAddress := 0.U
     when(state === s_idle && bus.ar.fire) {
@@ -108,6 +111,11 @@ class UART(val xLen: Int) extends Module {
     }.elsewhen(state === s_read_doAction) {
         when(readRoutineDone) {
             readRoutineTimer := 0.U
+            if (ProcessorCore.enableRandomDelay) {
+                readRoutineTimerMax := random.LFSR(UART.READ_ROUTINE_TIMER_WIDTH)
+            } else {
+                readRoutineTimerMax := UART.READ_ROUTINE_CLOCK_CYCLES.U
+            }
             rdata := io.dpi.read.readData
             rresp := 0.U // TODO: 在读事务逻辑中实现真正的 rresp 信号获取.
         }.otherwise {
@@ -119,7 +127,7 @@ class UART(val xLen: Int) extends Module {
     bus.r.bits.data := rdata
     bus.r.bits.resp := rresp
 
-    writeRoutineDone := writeRoutineTimer >= UART.WRITE_ROUTINE_CLOCK_CYCLES.U
+    writeRoutineDone := writeRoutineTimer >= writeRoutineTimerMax
     io.dpi.write.writeEnable := false.B
     io.dpi.write.writeAddress := 0.U
     io.dpi.write.writeData := 0.U
@@ -132,6 +140,11 @@ class UART(val xLen: Int) extends Module {
     }.elsewhen(state === s_write_doAction) {
         when(writeRoutineDone) {
             writeRoutineTimer := 0.U
+            if (ProcessorCore.enableRandomDelay) {
+                writeRoutineTimerMax := random.LFSR(UART.WRITE_ROUTINE_TIMER_WIDTH)
+            } else {
+                writeRoutineTimerMax := UART.WRITE_ROUTINE_CLOCK_CYCLES.U
+            }
             bresp := 0.U // TODO: 在写事务逻辑中实现真正的 bresp 信号获取.
         }.otherwise {
             io.dpi.write.writeEnable := true.B
@@ -147,6 +160,6 @@ class UART(val xLen: Int) extends Module {
 object UART {
     val READ_ROUTINE_CLOCK_CYCLES: Int = 5
     val WRITE_ROUTINE_CLOCK_CYCLES: Int = 5
-    val READ_ROUTINE_TIMER_WIDTH: Int = log2Ceil(READ_ROUTINE_CLOCK_CYCLES)
-    val WRITE_ROUTINE_TIMER_WIDTH: Int = log2Ceil(WRITE_ROUTINE_CLOCK_CYCLES)
+    val READ_ROUTINE_TIMER_WIDTH: Int = ProcessorCore.RANDOM_DELAY_WIDTH
+    val WRITE_ROUTINE_TIMER_WIDTH: Int = ProcessorCore.RANDOM_DELAY_WIDTH
 }

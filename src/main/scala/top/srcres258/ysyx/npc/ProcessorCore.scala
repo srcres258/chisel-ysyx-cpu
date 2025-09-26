@@ -189,6 +189,8 @@ object ProcessorCore extends App {
 
     val PC_INITIAL_VAL: UInt = PHYS_MEMORY_OFFSET.U(XLEN.W)
 
+    val RANDOM_DELAY_WIDTH: Int = 4
+
     /* 
     处理器执行的 6 个阶段: (每个阶段各耗时一个时钟周期)
 
@@ -207,7 +209,13 @@ object ProcessorCore extends App {
     // 我们把阶段的表示省掉, 因为各个阶段单元已经模块化, 之间遵循握手协议传递信息.
     // 所以在硬件电路中就没必要再量化表示各个阶段.
 
+    val enableDPIAdapter = args.contains("enableDPIAdapter")
+    val enableRandomDelay = args.contains("enableRandomDelay")
+
     val cs = new ChiselStage
+    println("Emitting SystemVerilog for ProcessorCore with arguments:")
+    println(s"  enableDPIAdapter: $enableDPIAdapter")
+    println(s"  enableRandomDelay: $enableRandomDelay")
     cs.execute(
         Array(
             "--target", "systemverilog",
@@ -216,7 +224,7 @@ object ProcessorCore extends App {
             "--firtool-option", "-lowering-options=disallowLocalVariables"
         ),
         Seq(ChiselGeneratorAnnotation(() => new ProcessorCore(
-            enableDPIAdapter = args.contains("enableDPIAdapter"),
+            enableDPIAdapter = enableDPIAdapter,
             xLen = XLEN
         )))
     )
