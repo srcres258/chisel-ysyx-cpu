@@ -44,6 +44,10 @@ object AXI4 {
     val BURST_WIDTH: Int = 2
     val RESP_WIDTH: Int = 2
 
+    val BURST_FIXED: Int = 0
+    val BURST_INCR: Int = 1
+    val BURST_WRAP: Int = 2
+
     /**
       * AMBA AXI4 总线协议的 AR (读地址) 信道.
       */

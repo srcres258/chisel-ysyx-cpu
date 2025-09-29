@@ -5,9 +5,9 @@ import chisel3.util._
 
 import top.srcres258.ysyx.npc.dpi.impl.IFUnitDPIBundle
 import top.srcres258.ysyx.npc.device.PhysicalRAM
-import top.srcres258.ysyx.npc.bus.AXI4Lite
 import top.srcres258.ysyx.npc.arbiter.RoundRobinArbiter
 import top.srcres258.ysyx.npc.util.Assertion
+import top.srcres258.ysyx.npc.bus.AXI4
 
 /**
   * 处理器的取指 (Instruction Fetch) 单元.
@@ -17,7 +17,7 @@ class IFUnit(val xLen: Int) extends Module {
 
     val io = IO(new Bundle {
         val executionInfo = Flipped(Decoupled(Flipped(new IFUnit.ExecutionInfo(xLen))))
-        val ramBus = new AXI4Lite(xLen)
+        val memBus = new AXI4(xLen)
         val arbiterReq = Output(Bool())
         val arbiterGranted = Input(Bool())
         val arbiterRelease = Output(Bool())
@@ -84,28 +84,32 @@ class IFUnit(val xLen: Int) extends Module {
         s_idle -> Mux(io.executionInfo.fire, s_waitData, s_idle),
         s_waitData -> s_waitArbiterGrant,
         s_waitArbiterGrant -> Mux(io.arbiterGranted, s_wait_arready, s_waitArbiterGrant),
-        s_wait_arready -> Mux(io.ramBus.ar.fire, s_wait_rvalid, s_wait_arready),
-        s_wait_rvalid -> Mux(io.ramBus.r.fire, s_wait_arbiterReleaseReady, s_wait_rvalid),
+        s_wait_arready -> Mux(io.memBus.ar.fire, s_wait_rvalid, s_wait_arready),
+        s_wait_rvalid -> Mux(io.memBus.r.fire, s_wait_arbiterReleaseReady, s_wait_rvalid),
         s_wait_arbiterReleaseReady -> Mux(io.arbiterReleaseReady, s_wait_nextStage_ready, s_wait_arbiterReleaseReady),
         s_wait_nextStage_ready -> Mux(io.nextStage.fire, s_idle, s_wait_nextStage_ready)
     ))
     io.executionInfo.ready := state === s_idle
-    io.ramBus.ar.valid := state === s_wait_arready
-    io.ramBus.r.ready := state === s_wait_rvalid
-    io.ramBus.aw.valid := false.B
-    io.ramBus.aw.bits := DontCare
-    io.ramBus.w.valid := false.B
-    io.ramBus.w.bits := DontCare
-    io.ramBus.b.ready := false.B
+    io.memBus.ar.valid := state === s_wait_arready
+    io.memBus.r.ready := state === s_wait_rvalid
+    io.memBus.aw.valid := false.B
+    io.memBus.aw.bits := DontCare
+    io.memBus.w.valid := false.B
+    io.memBus.w.bits := DontCare
+    io.memBus.b.ready := false.B
     io.nextStage.valid := state === s_wait_nextStage_ready
     io.nextStage.bits := nextStageData
 
     io.arbiterReq := state === s_waitArbiterGrant
 
     pc := io.executionInfo.bits.pc
-    io.ramBus.ar.bits.addr := pc
-    when(state === s_wait_rvalid && io.ramBus.r.fire) {
-        instData := io.ramBus.r.bits.data
+    io.memBus.ar.bits.addr := pc
+    io.memBus.ar.bits.id := 0.U
+    io.memBus.ar.bits.len := 0.U
+    io.memBus.ar.bits.size := ((xLen / 8) >> 1).U
+    io.memBus.ar.bits.burst := AXI4.BURST_FIXED.U
+    when(state === s_wait_rvalid && io.memBus.r.fire) {
+        instData := io.memBus.r.bits.data
     }
 
     nextStageData.pcCur := pc

@@ -37,6 +37,19 @@ class ysyx_25070190(
 ) extends Module {
     Assertion.assertProcessorXLen(xLen)
 
+    val master = Wire(new AXI4(xLen))
+    AXI4.defaultValuesForMaster(master)
+    val slave = Wire(Flipped(new AXI4(xLen)))
+    AXI4.defaultValuesForSlave(slave)
+
+    val io = IO(new Bundle {
+        val interrupt = Input(Bool()) // 中断信号
+        val master = new ysyx_25070190.OutMasterBundle(xLen)
+        val slave = Flipped(new ysyx_25070190.OutMasterBundle(xLen)) // For unknown purpose, ysyxSoC 要求处理器核心模块暴露这些信号出来.
+    })
+    io.master.masterConnectWith(master)
+    io.slave.slaveConnectWith(slave)
+
     val executing = RegInit(false.B)
 
     val pc_r = RegInit(ysyx_25070190.PC_INITIAL_VAL)
@@ -85,11 +98,11 @@ class ysyx_25070190(
         xbar.io.arbiter.release(AXI4LiteXbar.ARBITER_MASTER_IDX_IF_UNIT).valid := ifu.io.arbiterRelease
         ifu.io.arbiterGranted := xbar.io.arbiter.grantIdx === AXI4LiteXbar.ARBITER_MASTER_IDX_IF_UNIT.U
         ifu.io.arbiterReleaseReady := xbar.io.arbiter.release(AXI4LiteXbar.ARBITER_MASTER_IDX_IF_UNIT).ready
-        ifu.io.ramBus <> xbar.io.busPorts(AXI4LiteXbar.ARBITER_MASTER_IDX_IF_UNIT)
+        ifu.io.memBus <> master
     }.otherwise {
         ifu.io.arbiterGranted := false.B
         ifu.io.arbiterReleaseReady := false.B
-        AXI4Lite.defaultValuesForSlave(ifu.io.ramBus)
+        AXI4.defaultValuesForSlave(ifu.io.memBus)
     }
 
     val idu = Module(new IDUnit(xLen))
@@ -142,19 +155,6 @@ class ysyx_25070190(
     }
     upcu.io.pcOutput.ready := executing
 
-    val master = Wire(new AXI4(xLen))
-    AXI4.defaultValuesForMaster(master)
-    val slave = Wire(Flipped(new AXI4(xLen)))
-    AXI4.defaultValuesForSlave(slave)
-
-    val io = IO(new Bundle {
-        val interrupt = Input(Bool()) // 中断信号
-        val master = new ysyx_25070190.OutMasterBundle(xLen)
-        val slave = Flipped(new ysyx_25070190.OutMasterBundle(xLen)) // For unknown purpose, ysyxSoC 要求处理器核心模块暴露这些信号出来.
-    })
-    io.master.masterConnectWith(master)
-    io.slave.slaveConnectWith(slave)
-
     val generalDPI = Wire(new GeneralDPIBundle(xLen))
     generalDPI.clock := clock
     generalDPI.reset := reset
@@ -203,7 +203,7 @@ object ysyx_25070190 extends App {
     val CLINT_MEMORY_OFFSET: BigInt = BigInt(0xa0000048L)
     val CLINT_MEMORY_SIZE: BigInt = BigInt(8)
 
-    val PC_INITIAL_VAL: UInt = PHYS_MEMORY_OFFSET.U(XLEN.W)
+    val PC_INITIAL_VAL: UInt = BigInt(0x20000000L).U(XLEN.W)
 
     val RANDOM_DELAY_WIDTH: Int = 4
 
