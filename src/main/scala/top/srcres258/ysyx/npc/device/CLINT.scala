@@ -6,7 +6,7 @@ import chisel3.util._
 import top.srcres258.ysyx.npc.util.Assertion
 import top.srcres258.ysyx.npc.bus.AXI4Lite
 import top.srcres258.ysyx.npc.dpi.impl.CLINTDPIBundle
-import top.srcres258.ysyx.npc.ProcessorCore
+import top.srcres258.ysyx.npc.ysyx_25070190
 
 /**
   * CLINT(Core Local INTerrupt controller) 模块.
@@ -119,7 +119,7 @@ class CLINT(val xLen: Int) extends Module {
     }.elsewhen(state === s_read_doAction) {
         when(readRoutineDone) {
             readRoutineTimer := 0.U
-            if (ProcessorCore.enableRandomDelay) {
+            if (ysyx_25070190.enableRandomDelay) {
                 readRoutineTimerMax := random.LFSR(CLINT.READ_ROUTINE_TIMER_WIDTH)
             } else {
                 readRoutineTimerMax := CLINT.READ_ROUTINE_CLOCK_CYCLES.U
@@ -148,7 +148,7 @@ class CLINT(val xLen: Int) extends Module {
     }.elsewhen(state === s_write_doAction) {
         when(writeRoutineDone) {
             writeRoutineTimer := 0.U
-            if (ProcessorCore.enableRandomDelay) {
+            if (ysyx_25070190.enableRandomDelay) {
                 writeRoutineTimerMax := random.LFSR(CLINT.WRITE_ROUTINE_TIMER_WIDTH)
             } else {
                 writeRoutineTimerMax := CLINT.WRITE_ROUTINE_CLOCK_CYCLES.U
@@ -168,6 +168,6 @@ class CLINT(val xLen: Int) extends Module {
 object CLINT {
     val READ_ROUTINE_CLOCK_CYCLES: Int = 5
     val WRITE_ROUTINE_CLOCK_CYCLES: Int = 5
-    val READ_ROUTINE_TIMER_WIDTH: Int = ProcessorCore.RANDOM_DELAY_WIDTH
-    val WRITE_ROUTINE_TIMER_WIDTH: Int = ProcessorCore.RANDOM_DELAY_WIDTH
+    val READ_ROUTINE_TIMER_WIDTH: Int = ysyx_25070190.RANDOM_DELAY_WIDTH
+    val WRITE_ROUTINE_TIMER_WIDTH: Int = ysyx_25070190.RANDOM_DELAY_WIDTH
 }

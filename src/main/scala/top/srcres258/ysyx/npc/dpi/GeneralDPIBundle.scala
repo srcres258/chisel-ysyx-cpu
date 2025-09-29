@@ -11,6 +11,9 @@ import top.srcres258.ysyx.npc.util.Assertion
 class GeneralDPIBundle(xLen: Int) extends DPIBundle {
     Assertion.assertProcessorXLen(xLen)
 
+    val clock = Output(Clock())
+    val reset = Output(Reset())
+
     val core = new ProcessorCoreDPIBundle(xLen)
     val physicalRAM = new PhysicalRAMDPIBundle(xLen)
     val uart = new UARTDPIBundle(xLen)

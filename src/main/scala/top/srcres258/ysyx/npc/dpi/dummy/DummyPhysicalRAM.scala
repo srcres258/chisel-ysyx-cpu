@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 
 import top.srcres258.ysyx.npc.dpi.impl.PhysicalRAMDPIBundle
-import top.srcres258.ysyx.npc.ProcessorCore
+import top.srcres258.ysyx.npc.ysyx_25070190
 import top.srcres258.ysyx.npc.util.Assertion
 
 class DummyPhysicalRAM(val xLen: Int) extends Module {
@@ -40,5 +40,5 @@ class DummyPhysicalRAM(val xLen: Int) extends Module {
 
 object DummyPhysicalRAM {
     val RAM_SIZE: Int = 1024 * 2 // 2 KB
-    val RAM_ADDRESS_OFFSET: UInt = ProcessorCore.PC_INITIAL_VAL
+    val RAM_ADDRESS_OFFSET: UInt = ysyx_25070190.PC_INITIAL_VAL
 }

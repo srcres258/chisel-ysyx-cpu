@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 
 import top.srcres258.ysyx.npc.ControlUnit
-import top.srcres258.ysyx.npc.ProcessorCore
+import top.srcres258.ysyx.npc.ysyx_25070190
 import top.srcres258.ysyx.npc.util.Assertion
 
 /**
@@ -40,7 +40,7 @@ object MA_WB_Bundle {
     def setDefaultValues(bundle: MA_WB_Bundle): Unit = {
         bundle.pcCur := 0.U
         bundle.pcNext := 0.U
-        bundle.pcTarget := ProcessorCore.PC_INITIAL_VAL
+        bundle.pcTarget := ysyx_25070190.PC_INITIAL_VAL
         bundle.memReadData := 0.U
         bundle.aluOutput := 0.U
         bundle.compBranchEnable := false.B

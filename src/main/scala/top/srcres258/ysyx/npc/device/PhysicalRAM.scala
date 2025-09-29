@@ -6,7 +6,7 @@ import chisel3.util._
 import top.srcres258.ysyx.npc.dpi.impl.PhysicalRAMDPIBundle
 import top.srcres258.ysyx.npc.bus.AXI4Lite
 import top.srcres258.ysyx.npc.util.Assertion
-import top.srcres258.ysyx.npc.ProcessorCore
+import top.srcres258.ysyx.npc.ysyx_25070190
 
 /**
   * 物理内存 RAM 模块.
@@ -111,7 +111,7 @@ class PhysicalRAM(val xLen: Int) extends Module {
     }.elsewhen(state === s_read_doAction) {
         when(readRoutineDone) {
             readRoutineTimer := 0.U
-            if (ProcessorCore.enableRandomDelay) {
+            if (ysyx_25070190.enableRandomDelay) {
                 readRoutineTimerMax := random.LFSR(PhysicalRAM.READ_ROUTINE_TIMER_WIDTH)
             } else {
                 readRoutineTimerMax := PhysicalRAM.READ_ROUTINE_CLOCK_CYCLES.U
@@ -140,7 +140,7 @@ class PhysicalRAM(val xLen: Int) extends Module {
     }.elsewhen(state === s_write_doAction) {
         when(writeRoutineDone) {
             writeRoutineTimer := 0.U
-            if (ProcessorCore.enableRandomDelay) {
+            if (ysyx_25070190.enableRandomDelay) {
                 writeRoutineTimerMax := random.LFSR(PhysicalRAM.WRITE_ROUTINE_TIMER_WIDTH)
             } else {
                 writeRoutineTimerMax := PhysicalRAM.WRITE_ROUTINE_CLOCK_CYCLES.U
@@ -160,6 +160,6 @@ class PhysicalRAM(val xLen: Int) extends Module {
 object PhysicalRAM {
     val READ_ROUTINE_CLOCK_CYCLES: Int = 5
     val WRITE_ROUTINE_CLOCK_CYCLES: Int = 5
-    val READ_ROUTINE_TIMER_WIDTH: Int = ProcessorCore.RANDOM_DELAY_WIDTH
-    val WRITE_ROUTINE_TIMER_WIDTH: Int = ProcessorCore.RANDOM_DELAY_WIDTH
+    val READ_ROUTINE_TIMER_WIDTH: Int = ysyx_25070190.RANDOM_DELAY_WIDTH
+    val WRITE_ROUTINE_TIMER_WIDTH: Int = ysyx_25070190.RANDOM_DELAY_WIDTH
 }

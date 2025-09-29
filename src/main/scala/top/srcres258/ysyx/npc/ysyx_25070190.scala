@@ -24,17 +24,12 @@ import top.srcres258.ysyx.npc.device.UART
 import top.srcres258.ysyx.npc.dpi.dummy.DummyUART
 import top.srcres258.ysyx.npc.device.CLINT
 import top.srcres258.ysyx.npc.dpi.dummy.DummyCLINT
+import top.srcres258.ysyx.npc.bus.AXI4
 
 /**
   * RV32I 单周期处理器核心.
   */
-class ProcessorCore(
-    /**
-      * 是否启用 DPIAdapter, 向仿真环境提供触发信号以触发特定事件.
-      * 
-      * 若禁用, 则另外自行生成硬件级别的 dummy 元件以供综合分析工具进行网表综合分析.
-      */
-    enableDPIAdapter: Boolean,
+class ysyx_25070190(
     /**
       * 处理器字长.
       */
@@ -44,7 +39,7 @@ class ProcessorCore(
 
     val executing = RegInit(false.B)
 
-    val pc_r = RegInit(ProcessorCore.PC_INITIAL_VAL)
+    val pc_r = RegInit(ysyx_25070190.PC_INITIAL_VAL)
 
     /* 
     寄存器堆: ID 阶段读取数据, WB 阶段写入数据, 二者理论上不会发生读写冲突.
@@ -66,9 +61,9 @@ class ProcessorCore(
     val xbar = Module(new AXI4LiteXbar(
         xLen,
         Seq(
-            MemoryRange.ofSize(ProcessorCore.PHYS_MEMORY_OFFSET, ProcessorCore.PHYS_MEMORY_SIZE),
-            MemoryRange.ofSize(ProcessorCore.UART_MEMORY_OFFSET, ProcessorCore.UART_MEMORY_SIZE),
-            MemoryRange.ofSize(ProcessorCore.CLINT_MEMORY_OFFSET, ProcessorCore.CLINT_MEMORY_SIZE)
+            MemoryRange.ofSize(ysyx_25070190.PHYS_MEMORY_OFFSET, ysyx_25070190.PHYS_MEMORY_SIZE),
+            MemoryRange.ofSize(ysyx_25070190.UART_MEMORY_OFFSET, ysyx_25070190.UART_MEMORY_SIZE),
+            MemoryRange.ofSize(ysyx_25070190.CLINT_MEMORY_OFFSET, ysyx_25070190.CLINT_MEMORY_SIZE)
         )
     ))
     for (i <- 0 until AXI4LiteXbar.ARBITER_MAX_MASTER_AMOUNT) {
@@ -147,7 +142,22 @@ class ProcessorCore(
     }
     upcu.io.pcOutput.ready := executing
 
+    val master = Wire(new AXI4(xLen))
+    AXI4.defaultValuesForMaster(master)
+    val slave = Wire(Flipped(new AXI4(xLen)))
+    AXI4.defaultValuesForSlave(slave)
+
+    val io = IO(new Bundle {
+        val interrupt = Input(Bool()) // 中断信号
+        val master = new ysyx_25070190.OutMasterBundle(xLen)
+        val slave = Flipped(new ysyx_25070190.OutMasterBundle(xLen)) // For unknown purpose, ysyxSoC 要求处理器核心模块暴露这些信号出来.
+    })
+    io.master.masterConnectWith(master)
+    io.slave.slaveConnectWith(slave)
+
     val generalDPI = Wire(new GeneralDPIBundle(xLen))
+    generalDPI.clock := clock
+    generalDPI.reset := reset
 
     generalDPI.core.pc := pc_r
     /* 
@@ -172,23 +182,11 @@ class ProcessorCore(
     generalDPI.wbu <> wbu.io.dpi
     generalDPI.upcu <> upcu.io.dpi
 
-    val ioDPI = IO(new GeneralDPIBundle(xLen))
-    ioDPI <> generalDPI
-
-    if (enableDPIAdapter) {
-        val dpi = Module(new GeneralDPIAdapter(xLen))
-        dpi.io <> generalDPI
-    } else {
-        val dummyPhysicalRAM = Module(new DummyPhysicalRAM(xLen))
-        dummyPhysicalRAM.io.dpi <> generalDPI.physicalRAM
-        val dummyUART = Module(new DummyUART(xLen))
-        dummyUART.io.dpi <> generalDPI.uart
-        val dummyCLINT = Module(new DummyCLINT(xLen))
-        dummyCLINT.io.dpi <> generalDPI.clint
-    }
+    val dpi = Module(new GeneralDPIAdapter(xLen))
+    dpi.io <> generalDPI
 }
 
-object ProcessorCore extends App {
+object ysyx_25070190 extends App {
     val XLEN: Int = 32 // 32 位 RISC-V ISA, 处理器字长为 32.
 
     val PHYS_MEMORY_OFFSET: BigInt = BigInt(0x80000000L)
@@ -209,6 +207,120 @@ object ProcessorCore extends App {
 
     val RANDOM_DELAY_WIDTH: Int = 4
 
+    class OutMasterBundle(xLen: Int) extends Bundle {
+        val arvalid = Output(Bool())
+        val araddr = Output(UInt(xLen.W))
+        val arid = Output(UInt(4.W))
+        val arlen = Output(UInt(8.W))
+        val arsize = Output(UInt(3.W))
+        val arburst = Output(UInt(2.W))
+        val arready = Input(Bool())
+        
+        val rvalid = Input(Bool())
+        val rresp = Input(UInt(2.W))
+        val rdata = Input(UInt(xLen.W))
+        val rlast = Input(Bool())
+        val rid = Input(UInt(4.W))
+        val rready = Output(Bool())
+
+        val awvalid = Output(Bool())
+        val awaddr = Output(UInt(xLen.W))
+        val awid = Output(UInt(4.W))
+        val awlen = Output(UInt(8.W))
+        val awsize = Output(UInt(3.W))
+        val awburst = Output(UInt(2.W))
+        val awready = Input(Bool())
+        
+        val wvalid = Output(Bool())
+        val wdata = Output(UInt(xLen.W))
+        val wstrb = Output(UInt((xLen / 8).W))
+        val wlast = Output(Bool())
+        val wready = Input(Bool())
+
+        val bvalid = Input(Bool())
+        val bresp = Input(UInt(2.W))
+        val bid = Input(UInt(4.W))
+        val bready = Output(Bool())
+
+        /**
+          * 作为 AXI4 总线的 master 端进行信号连接.
+          */
+        def masterConnectWith(master: AXI4): Unit = {
+            arvalid := master.ar.valid
+            araddr := master.ar.bits.addr
+            arid := master.ar.bits.id
+            arlen := master.ar.bits.len
+            arsize := master.ar.bits.size
+            arburst := master.ar.bits.burst
+            master.ar.ready := arready
+
+            master.r.valid := rvalid
+            master.r.bits.resp := rresp
+            master.r.bits.data := rdata
+            master.r.bits.last := rlast
+            master.r.bits.id := rid
+            rready := master.r.ready
+
+            awvalid := master.aw.valid
+            awaddr := master.aw.bits.addr
+            awid := master.aw.bits.id
+            awlen := master.aw.bits.len
+            awsize := master.aw.bits.size
+            awburst := master.aw.bits.burst
+            master.aw.ready := awready
+
+            wvalid := master.w.valid
+            wdata := master.w.bits.data
+            wstrb := master.w.bits.strb
+            wlast := master.w.bits.last
+            master.w.ready := wready
+
+            master.b.valid := bvalid
+            master.b.bits.resp := bresp
+            master.b.bits.id := bid
+            bready := master.b.ready
+        }
+
+        /**
+          * 作为 AXI4 总线的 slave 端进行信号连接.
+          */
+        def slaveConnectWith(slave: AXI4): Unit = {
+            slave.ar.valid := arvalid
+            slave.ar.bits.addr := araddr
+            slave.ar.bits.id := arid
+            slave.ar.bits.len := arlen
+            slave.ar.bits.size := arsize
+            slave.ar.bits.burst := arburst
+            arready := slave.ar.ready
+
+            rvalid := slave.r.valid
+            rresp := slave.r.bits.resp
+            rdata := slave.r.bits.data
+            rlast := slave.r.bits.last
+            rid := slave.r.bits.id
+            slave.r.ready := rready
+
+            slave.aw.valid := awvalid
+            slave.aw.bits.addr := awaddr
+            slave.aw.bits.id := awid
+            slave.aw.bits.len := awlen
+            slave.aw.bits.size := awsize
+            slave.aw.bits.burst := awburst
+            awready := slave.aw.ready
+
+            slave.w.valid := wvalid
+            slave.w.bits.data := wdata
+            slave.w.bits.strb := wstrb
+            slave.w.bits.last := wlast
+            wready := slave.w.ready
+
+            bvalid := slave.b.valid
+            bresp := slave.b.bits.resp
+            bid := slave.b.bits.id
+            slave.b.ready := bready
+        }
+    }
+
     /* 
     处理器执行的 6 个阶段: (每个阶段各耗时一个时钟周期)
 
@@ -227,12 +339,12 @@ object ProcessorCore extends App {
     // 我们把阶段的表示省掉, 因为各个阶段单元已经模块化, 之间遵循握手协议传递信息.
     // 所以在硬件电路中就没必要再量化表示各个阶段.
 
-    val enableDPIAdapter = args.contains("enableDPIAdapter")
+    // val enableDPIAdapter = args.contains("enableDPIAdapter")
     val enableRandomDelay = args.contains("enableRandomDelay")
 
     val cs = new ChiselStage
     println("Emitting SystemVerilog for ProcessorCore with arguments:")
-    println(s"  enableDPIAdapter: $enableDPIAdapter")
+    // println(s"  enableDPIAdapter: $enableDPIAdapter")
     println(s"  enableRandomDelay: $enableRandomDelay")
     cs.execute(
         Array(
@@ -241,9 +353,6 @@ object ProcessorCore extends App {
             "--split-verilog",
             "--firtool-option", "-lowering-options=disallowLocalVariables"
         ),
-        Seq(ChiselGeneratorAnnotation(() => new ProcessorCore(
-            enableDPIAdapter = enableDPIAdapter,
-            xLen = XLEN
-        )))
+        Seq(ChiselGeneratorAnnotation(() => new ysyx_25070190(xLen = XLEN)))
     )
 }
