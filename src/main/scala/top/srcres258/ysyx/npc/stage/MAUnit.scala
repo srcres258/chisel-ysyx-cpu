@@ -5,9 +5,9 @@ import chisel3.util._
 
 import top.srcres258.ysyx.npc.LoadAndStoreUnit
 import top.srcres258.ysyx.npc.dpi.impl.MAUnitDPIBundle
-import top.srcres258.ysyx.npc.bus.AXI4Lite
 import top.srcres258.ysyx.npc.arbiter.RoundRobinArbiter
 import top.srcres258.ysyx.npc.util.Assertion
+import top.srcres258.ysyx.npc.bus.AXI4
 
 /**
   * 处理器的访存 (Memory Access) 单元.
@@ -16,7 +16,7 @@ class MAUnit(val xLen: Int) extends Module {
     Assertion.assertProcessorXLen(xLen)
     
     val io = IO(new Bundle {
-        val ramBus = new AXI4Lite(xLen)
+        val memBus = new AXI4(xLen)
         val arbiterReq = Output(Bool())
         val arbiterGranted = Input(Bool())
         val arbiterRelease = Output(Bool())
@@ -32,8 +32,8 @@ class MAUnit(val xLen: Int) extends Module {
 
     val skip = RegInit(false.B)
     val rdata = RegInit(0.U(xLen.W))
-    val rresp = RegInit(0.U(AXI4Lite.RESP_WIDTH.W))
-    val bresp = RegInit(0.U(AXI4Lite.RESP_WIDTH.W))
+    val rresp = RegInit(0.U(AXI4.RESP_WIDTH.W))
+    val bresp = RegInit(0.U(AXI4.RESP_WIDTH.W))
 
     val prevStageData = Wire(new EX_MA_Bundle(xLen))
     val nextStageData = Wire(new MA_WB_Bundle(xLen))
@@ -109,22 +109,22 @@ class MAUnit(val xLen: Int) extends Module {
             io.prevStage.bits.memWriteEnable -> s_store_wait_awready
         )),
 
-        s_load_wait_arready -> Mux(io.ramBus.ar.fire, s_load_wait_rvalid, s_load_wait_arready),
-        s_load_wait_rvalid -> Mux(io.ramBus.r.fire, s_wait_arbiterReleaseReady, s_load_wait_rvalid),
+        s_load_wait_arready -> Mux(io.memBus.ar.fire, s_load_wait_rvalid, s_load_wait_arready),
+        s_load_wait_rvalid -> Mux(io.memBus.r.fire, s_wait_arbiterReleaseReady, s_load_wait_rvalid),
         
-        s_store_wait_awready -> Mux(io.ramBus.aw.fire, s_store_wait_wready, s_store_wait_awready),
-        s_store_wait_wready -> Mux(io.ramBus.w.fire, s_store_wait_bvalid, s_store_wait_wready),
-        s_store_wait_bvalid -> Mux(io.ramBus.b.fire, s_wait_arbiterReleaseReady, s_store_wait_bvalid),
+        s_store_wait_awready -> Mux(io.memBus.aw.fire, s_store_wait_wready, s_store_wait_awready),
+        s_store_wait_wready -> Mux(io.memBus.w.fire, s_store_wait_bvalid, s_store_wait_wready),
+        s_store_wait_bvalid -> Mux(io.memBus.b.fire, s_wait_arbiterReleaseReady, s_store_wait_bvalid),
 
         s_wait_arbiterReleaseReady -> Mux(io.arbiterReleaseReady, s_wait_nextStage_ready, s_wait_arbiterReleaseReady),
         s_wait_nextStage_ready -> Mux(io.nextStage.fire, s_idle, s_wait_nextStage_ready)
     ))
     io.prevStage.ready := state === s_idle
-    io.ramBus.ar.valid := state === s_load_wait_arready
-    io.ramBus.r.ready := state === s_load_wait_rvalid
-    io.ramBus.aw.valid := state === s_store_wait_awready
-    io.ramBus.w.valid := state === s_store_wait_wready
-    io.ramBus.b.ready := state === s_store_wait_bvalid
+    io.memBus.ar.valid := state === s_load_wait_arready
+    io.memBus.r.ready := state === s_load_wait_rvalid
+    io.memBus.aw.valid := state === s_store_wait_awready
+    io.memBus.w.valid := state === s_store_wait_wready
+    io.memBus.b.ready := state === s_store_wait_bvalid
     io.nextStage.valid := state === s_wait_nextStage_ready
     prevStageData := io.prevStage.bits
     io.nextStage.bits := nextStageData
@@ -142,22 +142,39 @@ class MAUnit(val xLen: Int) extends Module {
     lsu.io.lsType := prevStageData.lsType
 
     val readDataAligned = Wire(UInt(xLen.W))
-    io.ramBus.ar.bits.addr := Mux(io.prevStage.bits.memReadEnable, address, 0.U)
-    when(state === s_load_wait_rvalid && io.ramBus.r.fire) {
-        rdata := io.ramBus.r.bits.data
-        rresp := io.ramBus.r.bits.resp
+    io.memBus.ar.bits.addr := Mux(io.prevStage.bits.memReadEnable, address, 0.U)
+    io.memBus.ar.bits.id := 0.U
+    io.memBus.ar.bits.len := 0.U
+    io.memBus.ar.bits.size := ((xLen / 8) >> 1).U
+    io.memBus.ar.bits.burst := AXI4.BURST_FIXED.U
+    when(state === s_load_wait_rvalid && io.memBus.r.fire) {
+        rdata := io.memBus.r.bits.data
+        rresp := io.memBus.r.bits.resp
     }
     lsu.io.readDataIn := rdata
     readDataAligned := lsu.io.readDataOut
 
     val writeDataUnaligned = Wire(UInt(xLen.W))
-    io.ramBus.aw.bits.addr := Mux(io.prevStage.bits.memWriteEnable, address, 0.U)
+    io.memBus.aw.bits.addr := Mux(io.prevStage.bits.memWriteEnable, address, 0.U)
+    io.memBus.aw.bits.id := 0.U
+    io.memBus.aw.bits.len := 0.U
+    when(io.prevStage.bits.lsType === LoadAndStoreUnit.LS_S_B.U) {
+        io.memBus.aw.bits.size := AXI4.sizeToAxSize(1).U
+    }.elsewhen(io.prevStage.bits.lsType === LoadAndStoreUnit.LS_S_H.U) {
+        io.memBus.aw.bits.size := AXI4.sizeToAxSize(2).U
+    }.elsewhen(io.prevStage.bits.lsType === LoadAndStoreUnit.LS_S_W.U) {
+        io.memBus.aw.bits.size := AXI4.sizeToAxSize(4).U
+    }.otherwise {
+        io.memBus.aw.bits.size := AXI4.sizeToAxSize(xLen / 8).U
+    }
+    io.memBus.aw.bits.burst := AXI4.BURST_FIXED.U
     writeDataUnaligned := prevStageData.storeData
     lsu.io.writeDataIn := writeDataUnaligned
-    io.ramBus.w.bits.data := lsu.io.writeDataOut
-    io.ramBus.w.bits.strb := lsu.io.dataStrobe
-    when(state === s_store_wait_bvalid && io.ramBus.b.fire) {
-        bresp := io.ramBus.b.bits.resp
+    io.memBus.w.bits.data := lsu.io.writeDataOut
+    io.memBus.w.bits.strb := lsu.io.dataStrobe
+    io.memBus.w.bits.last := true.B
+    when(state === s_store_wait_bvalid && io.memBus.b.fire) {
+        bresp := io.memBus.b.bits.resp
     }
 
     nextStageData.pcCur := prevStageData.pcCur

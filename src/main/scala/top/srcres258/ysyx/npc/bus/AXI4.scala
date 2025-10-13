@@ -86,6 +86,16 @@ object AXI4 {
         val burst = Output(UInt(BURST_WIDTH.W))
     }
 
+    object AW {
+        def defaultValues(aw: AW): Unit = {
+            aw.addr := 0.U
+            aw.id := 0.U
+            aw.len := 0.U
+            aw.size := 0.U
+            aw.burst := 0.U
+        }
+    }
+
     /**
       * AMBA AXI4 总线协议的 W (写数据) 信道.
       */
@@ -97,6 +107,14 @@ object AXI4 {
         val data = Output(UInt(xLen.W))
         val strb = Output(UInt(strbWidth.W))
         val last = Output(Bool())
+    }
+
+    object W {
+        def defaultValues(w: W): Unit = {
+            w.data := 0.U
+            w.strb := 0.U
+            w.last := false.B
+        }
     }
 
     /**
@@ -143,4 +161,6 @@ object AXI4 {
         bus.b.bits.resp := 0.U
         bus.b.bits.id := 0.U
     }
+
+    def sizeToAxSize(size: Int): Int = log2Ceil(size)
 }

@@ -7,6 +7,7 @@ import top.srcres258.ysyx.npc.util.Assertion
 import top.srcres258.ysyx.npc.bus.AXI4Lite
 import top.srcres258.ysyx.npc.dpi.impl.CLINTDPIBundle
 import top.srcres258.ysyx.npc.ysyx_25070190
+import top.srcres258.ysyx.npc.Configuration
 
 /**
   * CLINT(Core Local INTerrupt controller) 模块.
@@ -168,6 +169,6 @@ class CLINT(val xLen: Int) extends Module {
 object CLINT {
     val READ_ROUTINE_CLOCK_CYCLES: Int = 5
     val WRITE_ROUTINE_CLOCK_CYCLES: Int = 5
-    val READ_ROUTINE_TIMER_WIDTH: Int = ysyx_25070190.RANDOM_DELAY_WIDTH
-    val WRITE_ROUTINE_TIMER_WIDTH: Int = ysyx_25070190.RANDOM_DELAY_WIDTH
+    val READ_ROUTINE_TIMER_WIDTH: Int = Configuration.RANDOM_DELAY_WIDTH
+    val WRITE_ROUTINE_TIMER_WIDTH: Int = Configuration.RANDOM_DELAY_WIDTH
 }

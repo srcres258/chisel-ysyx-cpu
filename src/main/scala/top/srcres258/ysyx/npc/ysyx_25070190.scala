@@ -16,12 +16,7 @@ import top.srcres258.ysyx.npc.dpi.impl._
 import top.srcres258.ysyx.npc.bus.AXI4Lite
 import top.srcres258.ysyx.npc.arbiter.RoundRobinArbiter
 import top.srcres258.ysyx.npc.util.Assertion
-import top.srcres258.ysyx.npc.dpi.dummy.DummyPhysicalRAM
-import top.srcres258.ysyx.npc.xbar.AXI4LiteXbar
-import top.srcres258.ysyx.npc.device.PhysicalRAM
 import top.srcres258.ysyx.npc.util.MemoryRange
-import top.srcres258.ysyx.npc.device.UART
-import top.srcres258.ysyx.npc.dpi.dummy.DummyUART
 import top.srcres258.ysyx.npc.device.CLINT
 import top.srcres258.ysyx.npc.dpi.dummy.DummyCLINT
 import top.srcres258.ysyx.npc.bus.AXI4
@@ -52,7 +47,7 @@ class ysyx_25070190(
 
     val executing = RegInit(false.B)
 
-    val pc_r = RegInit(ysyx_25070190.PC_INITIAL_VAL)
+    val pc_r = RegInit(Configuration.PC_INITIAL_VAL.U(xLen.W))
 
     /* 
     寄存器堆: ID 阶段读取数据, WB 阶段写入数据, 二者理论上不会发生读写冲突.
@@ -62,30 +57,14 @@ class ysyx_25070190(
     GeneralPurposeRegisterFile.defaultValuesForMaster(gprFile)
     ControlAndStatusRegisterFile.defaultValuesForMaster(csrFile)
 
-    val physicalRAM = Module(new PhysicalRAM(xLen))
-    AXI4Lite.defaultValuesForMaster(physicalRAM.io.bus)
-
-    val uart = Module(new UART(xLen))
-    AXI4Lite.defaultValuesForMaster(uart.io.bus)
-
     val clint = Module(new CLINT(xLen))
     AXI4Lite.defaultValuesForMaster(clint.io.bus)
 
-    val xbar = Module(new AXI4LiteXbar(
-        xLen,
-        Seq(
-            MemoryRange.ofSize(ysyx_25070190.PHYS_MEMORY_OFFSET, ysyx_25070190.PHYS_MEMORY_SIZE),
-            MemoryRange.ofSize(ysyx_25070190.UART_MEMORY_OFFSET, ysyx_25070190.UART_MEMORY_SIZE),
-            MemoryRange.ofSize(ysyx_25070190.CLINT_MEMORY_OFFSET, ysyx_25070190.CLINT_MEMORY_SIZE)
-        )
-    ))
-    for (i <- 0 until AXI4LiteXbar.ARBITER_MAX_MASTER_AMOUNT) {
-        AXI4Lite.defaultValuesForMaster(xbar.io.busPorts(i))
-    }
-    RoundRobinArbiter.IOBundle.defaultValuesForMaster(xbar.io.arbiter)
-    xbar.io.deviceBuses(0) <> physicalRAM.io.bus
-    xbar.io.deviceBuses(1) <> uart.io.bus
-    xbar.io.deviceBuses(2) <> clint.io.bus
+    /**
+      * 仲裁器: 我们这里选用 Round-Robin Arbiter.
+      */
+    val arbiter = Module(new RoundRobinArbiter(Configuration.Arbiter.ARBITER_MAX_MASTER_AMOUNT))
+    RoundRobinArbiter.IOBundle.defaultValuesForMaster(arbiter.io)
 
     val ifu = Module(new IFUnit(xLen))
     ifu.io.executionInfo.bits.pc := pc_r
@@ -94,10 +73,10 @@ class ysyx_25070190(
     }
     ifu.io.executionInfo.valid := !reset.asBool && !executing
     when(ifu.io.working) {
-        xbar.io.arbiter.req(AXI4LiteXbar.ARBITER_MASTER_IDX_IF_UNIT) := ifu.io.arbiterReq
-        xbar.io.arbiter.release(AXI4LiteXbar.ARBITER_MASTER_IDX_IF_UNIT).valid := ifu.io.arbiterRelease
-        ifu.io.arbiterGranted := xbar.io.arbiter.grantIdx === AXI4LiteXbar.ARBITER_MASTER_IDX_IF_UNIT.U
-        ifu.io.arbiterReleaseReady := xbar.io.arbiter.release(AXI4LiteXbar.ARBITER_MASTER_IDX_IF_UNIT).ready
+        arbiter.io.req(Configuration.Arbiter.ARBITER_MASTER_IDX_IF_UNIT) := ifu.io.arbiterReq
+        arbiter.io.release(Configuration.Arbiter.ARBITER_MASTER_IDX_IF_UNIT).valid := ifu.io.arbiterRelease
+        ifu.io.arbiterGranted := arbiter.io.grantIdx === Configuration.Arbiter.ARBITER_MASTER_IDX_IF_UNIT.U
+        ifu.io.arbiterReleaseReady := arbiter.io.release(Configuration.Arbiter.ARBITER_MASTER_IDX_IF_UNIT).ready
         ifu.io.memBus <> master
     }.otherwise {
         ifu.io.arbiterGranted := false.B
@@ -125,15 +104,15 @@ class ysyx_25070190(
     val mau = Module(new MAUnit(xLen))
     DecoupledIOConnect(exu.io.nextStage, mau.io.prevStage, DecoupledIOConnect.Pipeline)
     when(mau.io.working) {
-        xbar.io.arbiter.req(AXI4LiteXbar.ARBITER_MASTER_IDX_MA_UNIT) := mau.io.arbiterReq
-        xbar.io.arbiter.release(AXI4LiteXbar.ARBITER_MASTER_IDX_MA_UNIT).valid := mau.io.arbiterRelease
-        mau.io.arbiterGranted := xbar.io.arbiter.grantIdx === AXI4LiteXbar.ARBITER_MASTER_IDX_MA_UNIT.U
-        mau.io.arbiterReleaseReady := xbar.io.arbiter.release(AXI4LiteXbar.ARBITER_MASTER_IDX_MA_UNIT).ready
-        mau.io.ramBus <> xbar.io.busPorts(AXI4LiteXbar.ARBITER_MASTER_IDX_MA_UNIT)
+        arbiter.io.req(Configuration.Arbiter.ARBITER_MASTER_IDX_MA_UNIT) := mau.io.arbiterReq
+        arbiter.io.release(Configuration.Arbiter.ARBITER_MASTER_IDX_MA_UNIT).valid := mau.io.arbiterRelease
+        mau.io.arbiterGranted := arbiter.io.grantIdx === Configuration.Arbiter.ARBITER_MASTER_IDX_MA_UNIT.U
+        mau.io.arbiterReleaseReady := arbiter.io.release(Configuration.Arbiter.ARBITER_MASTER_IDX_MA_UNIT).ready
+        mau.io.memBus <> master
     }.otherwise {
         mau.io.arbiterGranted := false.B
         mau.io.arbiterReleaseReady := false.B
-        AXI4Lite.defaultValuesForSlave(mau.io.ramBus)
+        AXI4.defaultValuesForSlave(mau.io.memBus)
     }
 
     val wbu = Module(new WBUnit(xLen))
@@ -169,8 +148,6 @@ class ysyx_25070190(
     generalDPI.core.executing := executing
     generalDPI.core.ifuInputValid := !executing
 
-    generalDPI.physicalRAM <> physicalRAM.io.dpi
-    generalDPI.uart <> uart.io.dpi
     generalDPI.clint <> clint.io.dpi
     generalDPI.gpr <> gprFile.io.dpi
     generalDPI.csr <> csrFile.io.dpi
@@ -187,26 +164,6 @@ class ysyx_25070190(
 }
 
 object ysyx_25070190 extends App {
-    val XLEN: Int = 32 // 32 位 RISC-V ISA, 处理器字长为 32.
-
-    val PHYS_MEMORY_OFFSET: BigInt = BigInt(0x80000000L)
-    // val PHYS_MEMORY_SIZE: BigInt = BigInt(1024L * 1024L * 128L)
-    /* 
-    TODO: 目前设置这么大内存, 好让 NPC 能够直接通过 DPI-C 经由仿真环境提供的 MMIO 方式访问外设.
-    以后在 NPC 中通过 Xbar 以硬件方式把 MMIO 实现了, 需要改回上面被注释掉的代码的真实物理内存大小.
-     */
-    val PHYS_MEMORY_SIZE: BigInt = BigInt(0xb0000000L - 0x80000000L)
-
-    val UART_MEMORY_OFFSET: BigInt = BigInt(0x10000000L)
-    val UART_MEMORY_SIZE: BigInt = BigInt(0x1000L)
-
-    val CLINT_MEMORY_OFFSET: BigInt = BigInt(0xa0000048L)
-    val CLINT_MEMORY_SIZE: BigInt = BigInt(8)
-
-    val PC_INITIAL_VAL: UInt = BigInt(0x20000000L).U(XLEN.W)
-
-    val RANDOM_DELAY_WIDTH: Int = 4
-
     class OutMasterBundle(xLen: Int) extends Bundle {
         val arvalid = Output(Bool())
         val araddr = Output(UInt(xLen.W))
@@ -353,6 +310,6 @@ object ysyx_25070190 extends App {
             "--split-verilog",
             "--firtool-option", "-lowering-options=disallowLocalVariables"
         ),
-        Seq(ChiselGeneratorAnnotation(() => new ysyx_25070190(xLen = XLEN)))
+        Seq(ChiselGeneratorAnnotation(() => new ysyx_25070190(xLen = Configuration.XLEN)))
     )
 }
