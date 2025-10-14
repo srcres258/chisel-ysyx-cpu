@@ -13,4 +13,8 @@ class IFUnitDPIBundle(xLen: Int) extends DPIBundle {
       * 输出: 处理器 IF 阶段传给下一阶段的信息的 valid 信号.
       */
     val if_nextStage_valid = Output(Bool())
+    /**
+      * 输出: 处理器当前 PC 值处的指令内容.
+      */
+    val instData = Output(UInt(xLen.W))
 }

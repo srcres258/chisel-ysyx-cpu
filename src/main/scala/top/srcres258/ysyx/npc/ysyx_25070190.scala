@@ -308,7 +308,8 @@ object ysyx_25070190 extends App {
             "--target", "systemverilog",
             "--target-dir", "generated",
             "--split-verilog",
-            "--firtool-option", "-lowering-options=disallowLocalVariables"
+            "--firtool-option", "-lowering-options=disallowLocalVariables",
+            "--firtool-option", "--verification-flavor=if-else-fatal"
         ),
         Seq(ChiselGeneratorAnnotation(() => new ysyx_25070190(xLen = Configuration.XLEN)))
     )

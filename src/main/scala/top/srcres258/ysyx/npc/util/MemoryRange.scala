@@ -12,4 +12,6 @@ case class MemoryRange(start: BigInt, end: BigInt) {
 
 object MemoryRange {
     def ofSize(start: BigInt, size: BigInt): MemoryRange = MemoryRange(start, start + size - 1)
+
+    def ofSize(start: Long, size: Long): MemoryRange = ofSize(BigInt(start), BigInt(size))
 }

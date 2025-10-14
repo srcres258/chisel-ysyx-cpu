@@ -147,6 +147,9 @@ class MAUnit(val xLen: Int) extends Module {
     io.memBus.ar.bits.len := 0.U
     io.memBus.ar.bits.size := ((xLen / 8) >> 1).U
     io.memBus.ar.bits.burst := AXI4.BURST_FIXED.U
+    when(io.memBus.ar.valid) {
+        Assertion.assertMemoryAccessAddress(io.memBus.ar.bits.addr)
+    }
     when(state === s_load_wait_rvalid && io.memBus.r.fire) {
         rdata := io.memBus.r.bits.data
         rresp := io.memBus.r.bits.resp
@@ -158,6 +161,9 @@ class MAUnit(val xLen: Int) extends Module {
     io.memBus.aw.bits.addr := Mux(io.prevStage.bits.memWriteEnable, address, 0.U)
     io.memBus.aw.bits.id := 0.U
     io.memBus.aw.bits.len := 0.U
+    when(io.memBus.aw.valid) {
+        Assertion.assertMemoryAccessAddress(io.memBus.aw.bits.addr)
+    }
     when(io.prevStage.bits.lsType === LoadAndStoreUnit.LS_S_B.U) {
         io.memBus.aw.bits.size := AXI4.sizeToAxSize(1).U
     }.elsewhen(io.prevStage.bits.lsType === LoadAndStoreUnit.LS_S_H.U) {

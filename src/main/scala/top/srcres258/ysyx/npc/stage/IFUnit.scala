@@ -107,6 +107,9 @@ class IFUnit(val xLen: Int) extends Module {
     io.memBus.ar.bits.len := 0.U
     io.memBus.ar.bits.size := AXI4.sizeToAxSize(xLen).U
     io.memBus.ar.bits.burst := AXI4.BURST_FIXED.U
+    when(io.memBus.ar.valid) {
+        Assertion.assertMemoryAccessAddress(io.memBus.ar.bits.addr)
+    }
     when(state === s_wait_rvalid && io.memBus.r.fire) {
         instData := io.memBus.r.bits.data
     }
@@ -118,6 +121,7 @@ class IFUnit(val xLen: Int) extends Module {
     io.arbiterRelease := state === s_wait_arbiterReleaseReady
 
     io.dpi.if_nextStage_valid := io.nextStage.valid
+    io.dpi.instData := instData
 
     io.working := state =/= s_idle
 }
