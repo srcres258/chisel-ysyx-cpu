@@ -141,15 +141,30 @@ class MAUnit(val xLen: Int) extends Module {
     val lsu = Module(new LoadAndStoreUnit(xLen))
     lsu.io.lsType := prevStageData.lsType
 
+    def calcAxSize(lsTypeIn: UInt = io.prevStage.bits.lsType): UInt = {
+        val lsType = Wire(UInt(LoadAndStoreUnit.LS_TYPE_LEN.W))
+        lsType := lsTypeIn
+        MuxCase(AXI4.sizeToAxSize(xLen / 8).U, Seq(
+            (lsType === LoadAndStoreUnit.LS_L_B.U) -> AXI4.sizeToAxSize(1).U,
+            (lsType === LoadAndStoreUnit.LS_L_BU.U) -> AXI4.sizeToAxSize(1).U,
+            (lsType === LoadAndStoreUnit.LS_S_B.U) -> AXI4.sizeToAxSize(1).U,
+            (lsType === LoadAndStoreUnit.LS_L_H.U) -> AXI4.sizeToAxSize(2).U,
+            (lsType === LoadAndStoreUnit.LS_L_HU.U) -> AXI4.sizeToAxSize(2).U,
+            (lsType === LoadAndStoreUnit.LS_S_H.U) -> AXI4.sizeToAxSize(2).U,
+            (lsType === LoadAndStoreUnit.LS_L_W.U) -> AXI4.sizeToAxSize(4).U,
+            (lsType === LoadAndStoreUnit.LS_S_W.U) -> AXI4.sizeToAxSize(4).U
+        ))
+    }
+
     val readDataAligned = Wire(UInt(xLen.W))
-    io.memBus.ar.bits.addr := Mux(io.prevStage.bits.memReadEnable, address, 0.U)
-    io.memBus.ar.bits.id := 0.U
-    io.memBus.ar.bits.len := 0.U
-    io.memBus.ar.bits.size := ((xLen / 8) >> 1).U
-    io.memBus.ar.bits.burst := AXI4.BURST_FIXED.U
     when(io.memBus.ar.valid) {
         Assertion.assertMemoryAccessAddress(io.memBus.ar.bits.addr)
     }
+    io.memBus.ar.bits.addr := Mux(io.prevStage.bits.memReadEnable, address, 0.U)
+    io.memBus.ar.bits.id := 0.U
+    io.memBus.ar.bits.len := 0.U
+    io.memBus.ar.bits.size := calcAxSize()
+    io.memBus.ar.bits.burst := AXI4.BURST_FIXED.U
     when(state === s_load_wait_rvalid && io.memBus.r.fire) {
         rdata := io.memBus.r.bits.data
         rresp := io.memBus.r.bits.resp
@@ -158,21 +173,13 @@ class MAUnit(val xLen: Int) extends Module {
     readDataAligned := lsu.io.readDataOut
 
     val writeDataUnaligned = Wire(UInt(xLen.W))
-    io.memBus.aw.bits.addr := Mux(io.prevStage.bits.memWriteEnable, address, 0.U)
-    io.memBus.aw.bits.id := 0.U
-    io.memBus.aw.bits.len := 0.U
     when(io.memBus.aw.valid) {
         Assertion.assertMemoryAccessAddress(io.memBus.aw.bits.addr)
     }
-    when(io.prevStage.bits.lsType === LoadAndStoreUnit.LS_S_B.U) {
-        io.memBus.aw.bits.size := AXI4.sizeToAxSize(1).U
-    }.elsewhen(io.prevStage.bits.lsType === LoadAndStoreUnit.LS_S_H.U) {
-        io.memBus.aw.bits.size := AXI4.sizeToAxSize(2).U
-    }.elsewhen(io.prevStage.bits.lsType === LoadAndStoreUnit.LS_S_W.U) {
-        io.memBus.aw.bits.size := AXI4.sizeToAxSize(4).U
-    }.otherwise {
-        io.memBus.aw.bits.size := AXI4.sizeToAxSize(xLen / 8).U
-    }
+    io.memBus.aw.bits.addr := Mux(io.prevStage.bits.memWriteEnable, address, 0.U)
+    io.memBus.aw.bits.id := 0.U
+    io.memBus.aw.bits.len := 0.U
+    io.memBus.aw.bits.size := calcAxSize()
     io.memBus.aw.bits.burst := AXI4.BURST_FIXED.U
     writeDataUnaligned := prevStageData.storeData
     lsu.io.writeDataIn := writeDataUnaligned
