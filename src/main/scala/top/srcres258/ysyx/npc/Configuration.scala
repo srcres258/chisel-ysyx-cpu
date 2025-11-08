@@ -17,7 +17,7 @@ object Configuration {
     val CLINT_MEMORY_OFFSET: BigInt = BigInt(0xa0000048L)
     val CLINT_MEMORY_SIZE: BigInt = BigInt(8)
 
-    val PC_INITIAL_VAL: BigInt = BigInt(0x20000000L)
+    val PC_INITIAL_VAL: BigInt = BigInt(0x30000000L)
 
     val RANDOM_DELAY_WIDTH: Int = 4
 
