@@ -105,7 +105,7 @@ class IFUnit(val xLen: Int) extends Module {
     io.memBus.ar.bits.addr := pc
     io.memBus.ar.bits.id := 0.U
     io.memBus.ar.bits.len := 0.U
-    io.memBus.ar.bits.size := AXI4.sizeToAxSize(xLen).U
+    io.memBus.ar.bits.size := AXI4.sizeToAxSize(xLen / 8).U
     io.memBus.ar.bits.burst := AXI4.BURST_FIXED.U
     when(io.memBus.ar.valid) {
         Assertion.assertMemoryAccessAddress(io.memBus.ar.bits.addr)
