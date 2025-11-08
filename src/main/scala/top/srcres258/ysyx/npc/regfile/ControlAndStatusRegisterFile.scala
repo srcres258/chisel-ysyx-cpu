@@ -32,8 +32,9 @@ class ControlAndStatusRegisterFile(
     })
 
     val registers = RegInit(ControlAndStatusRegisterFile.RegisterBundle(xLen))
+    val roRegisters = ControlAndStatusRegisterFile.ReadOnlyRegisterBundle(xLen)
 
-    for (readPort <- List(io.readPort1, io.readPort2, io.readPort3)) {
+    Seq(io.readPort1, io.readPort2, io.readPort3).foreach(readPort => {
         readPort.readData := 0.U
         when(readPort.readAddress.orR) {
             when(readPort.readAddress === ControlAndStatusRegisterFile.CSR_MSTATUS.U(regAddrWidth.W)) {
@@ -46,11 +47,15 @@ class ControlAndStatusRegisterFile(
                 readPort.readData := registers.mcause
             }.elsewhen(readPort.readAddress === ControlAndStatusRegisterFile.CSR_MTVAL.U(regAddrWidth.W)) {
                 readPort.readData := registers.mtval
+            }.elsewhen(readPort.readAddress === ControlAndStatusRegisterFile.CSR_MVENDORID.U(regAddrWidth.W)) {
+                readPort.readData := roRegisters.mvendorid
+            }.elsewhen(readPort.readAddress === ControlAndStatusRegisterFile.CSR_MARCHID.U(regAddrWidth.W)) {
+                readPort.readData := roRegisters.marchid
             }
         }
-    }
+    })
 
-    for (writePort <- List(io.writePort1, io.writePort2)) {
+    Seq(io.writePort1, io.writePort2).foreach(writePort => {
         when(writePort.writeEnable && writePort.writeAddress.orR) {
             when(writePort.writeAddress === ControlAndStatusRegisterFile.CSR_MSTATUS.U(regAddrWidth.W)) {
                 registers.mstatus := writePort.writeData
@@ -64,13 +69,15 @@ class ControlAndStatusRegisterFile(
                 registers.mtval := writePort.writeData
             }
         }
-    }
+    })
 
     io.dpi.csr_mstatus := registers.mstatus
     io.dpi.csr_mtvec := registers.mtvec
     io.dpi.csr_mepc := registers.mepc
     io.dpi.csr_mcause := registers.mcause
     io.dpi.csr_mtval := registers.mtval
+    io.dpi.csr_mvendorid := roRegisters.mvendorid
+    io.dpi.csr_marchid := roRegisters.marchid
 }
 
 object ControlAndStatusRegisterFile {
@@ -98,6 +105,34 @@ object ControlAndStatusRegisterFile {
             default.mepc := 0.U
             default.mcause := 0.U
             default.mtval := 0.U
+
+            default
+        }
+    }
+
+    /**
+      * 定义在处理器中需要实现的只读 (read-only) CSR 寄存器.
+      */
+    class ReadOnlyRegisterBundle(xLen: Int) extends Bundle {
+        Assertion.assertProcessorXLen(xLen)
+
+        val mvendorid = UInt(xLen.W)
+        val marchid = UInt(xLen.W)
+    }
+
+    object ReadOnlyRegisterBundle {
+        def apply(xLen: Int): ReadOnlyRegisterBundle = {
+            Assertion.assertProcessorXLen(xLen)
+
+            val default = Wire(new ReadOnlyRegisterBundle(xLen))
+
+            /* read-only CSRs */
+            // ysyx 规定: mvendorid 为 "ysyx" 的各个字符的 ASCII 码按大端序组合,
+            // 即 0x79737978.
+            default.mvendorid := 0x79737978L.U
+            // ysyx 规定: marchid 为 ysyx 学号的数字部分的十进制表示.
+            // 作者的 ysyx 学号为 ysyx_25070190, 对应的十进制表示为 25070190.
+            default.marchid := 25070190.U
 
             default
         }
@@ -167,6 +202,8 @@ object ControlAndStatusRegisterFile {
     val CSR_MEPC: Int = 0x341
     val CSR_MCAUSE: Int = 0x342
     val CSR_MTVAL: Int = 0x343
+    val CSR_MVENDORID: Int = 0xF11
+    val CSR_MARCHID: Int = 0xF12
 
     def defaultValuesForMaster(csrFile: ControlAndStatusRegisterFile): Unit = {
         for (readPort <- List(csrFile.io.readPort1, csrFile.io.readPort2, csrFile.io.readPort3)) {

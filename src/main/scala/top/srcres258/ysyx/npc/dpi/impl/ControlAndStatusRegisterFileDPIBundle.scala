@@ -29,4 +29,12 @@ class ControlAndStatusRegisterFileDPIBundle(xLen: Int) extends DPIBundle {
       * 输出: 控制与状态寄存器 mtval.
       */
     val csr_mtval = Output(UInt(xLen.W))
+    /**
+      * 输出: 制造商标识符 mvendorid.
+      */
+    val csr_mvendorid = Output(UInt(xLen.W))
+    /**
+      * 输出: 架构标识符 marchid.
+      */
+    val csr_marchid = Output(UInt(xLen.W))
 }

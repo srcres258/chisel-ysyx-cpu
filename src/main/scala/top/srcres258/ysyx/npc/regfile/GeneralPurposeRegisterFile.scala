@@ -29,6 +29,7 @@ class GeneralPurposeRegisterFile(
     })
 
     val registers = RegInit(VecInit(Seq.fill(1 << regAddrWidth)(0.U(xLen.W))))
+    registers(0.U) := 0.U // RISC-V 规范规定：x0 寄存器恒为 0.
 
     io.readPort.readData1 := Mux(io.readPort.readAddress1.orR, registers(io.readPort.readAddress1), 0.U)
     io.readPort.readData2 := Mux(io.readPort.readAddress2.orR, registers(io.readPort.readAddress2), 0.U)
@@ -40,8 +41,6 @@ class GeneralPurposeRegisterFile(
     for (i <- 0 until io.dpi.gprs.length) {
         io.dpi.gprs(i) := registers(i)
     }
-
-    registers(0.U) := 0.U // RISC-V 规范规定：x0 寄存器恒为 0.
 }
 
 object GeneralPurposeRegisterFile {
