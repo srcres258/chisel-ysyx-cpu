@@ -14,8 +14,15 @@ object Configuration {
     val UART_MEMORY_OFFSET: BigInt = BigInt(0x10000000L)
     val UART_MEMORY_SIZE: BigInt = BigInt(0x1000L)
 
-    val CLINT_MEMORY_OFFSET: BigInt = BigInt(0xa0000048L)
-    val CLINT_MEMORY_SIZE: BigInt = BigInt(8)
+    /** ACLINT MTIME 设备寄存器基地址 (ysyxSoC CLINT 空间中) */
+    val ACLINT_MTIME_BASE: BigInt = BigInt(0x0200bff8L)
+
+    /** ACLINT MTIME 设备地址空间大小 (8 字节: 两个 32-bit 字) */
+    val ACLINT_MTIME_SIZE: BigInt = BigInt(8)
+
+    /** CLINT 地址空间在 CPU AXI4 总线上的范围 (64KB) */
+    val CLINT_ADDR_BASE: BigInt = BigInt(0x02000000L)
+    val CLINT_ADDR_SIZE: BigInt = BigInt(0x10000L)
 
     val PC_INITIAL_VAL: BigInt = BigInt(0x30000000L)
 

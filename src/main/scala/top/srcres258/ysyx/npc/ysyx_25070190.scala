@@ -58,7 +58,7 @@ class ysyx_25070190(
     ControlAndStatusRegisterFile.defaultValuesForMaster(csrFile)
 
     val clint = Module(new CLINT(xLen))
-    AXI4Lite.defaultValuesForMaster(clint.io.bus)
+    // CLINT 总线在 mau 实例化后连接 (见下方)
 
     /**
       * 仲裁器: 我们这里选用 Round-Robin Arbiter.
@@ -114,6 +114,8 @@ class ysyx_25070190(
         mau.io.arbiterReleaseReady := false.B
         AXI4.defaultValuesForSlave(mau.io.memBus)
     }
+
+    mau.io.clintBus <> clint.io.bus
 
     val wbu = Module(new WBUnit(xLen))
     DecoupledIOConnect(mau.io.nextStage, wbu.io.prevStage, DecoupledIOConnect.Pipeline)

@@ -10,16 +10,20 @@ import top.srcres258.ysyx.npc.ysyx_25070190
 import top.srcres258.ysyx.npc.Configuration
 
 /**
-  * CLINT(Core Local INTerrupt controller) 模块.
+  * ACLINT MTIMER 兼容的 CLINT 模块.
   * 
-  * 该模块是 RISC-V 系统中较通用的中断控制器, 是一个用于维护时钟中断和软件中断的模块.
+  * 该模块实现 ACLINT v1.0-rc4 标准中 MTIMER 设备的 MTIME 寄存器,
+  * 通过 DPI-C 接口从仿真环境获取真实时钟计数.
+  *
+  * 当前实现:
+  *   - MTIME (0x0200bff8 ~ 0x0200bfff): 64-bit 单调递增时间计数器 (RW)
+  *   - MTIMECMP (0x02004000 ~ 0x02007ff7): 预留, 读写返回 0
+  *   - MSWI (0x02000000 ~ 0x02003fff): 预留, 读写返回 0
   */
 class CLINT(val xLen: Int) extends Module {
     /* 
-    目前 CLINT 包含一个只读的设备寄存器 mtime.
-
-    考虑该模块的实现方式, 还是通过 DPI-C 接口由仿真环境提供 mtime 的值.
-     */
+    目前 CLINT 包含 MTIME 设备寄存器 (64-bit, 通过 DPI-C 提供).
+    */
 
     Assertion.assertProcessorXLen(xLen)
 
@@ -46,6 +50,14 @@ class CLINT(val xLen: Int) extends Module {
     val bus = Wire(Flipped(new AXI4Lite(xLen)))
     bus <> io.bus
 
+    // 判断地址是否命中 ACLINT MTIME 寄存器范围 (8 字节)
+    val araddrIn = Wire(UInt(xLen.W))
+    araddrIn := araddr  // 读事务中锁存的读地址
+    val hitMTIME_r = araddrIn >= Configuration.ACLINT_MTIME_BASE.U &&
+                     araddrIn < (Configuration.ACLINT_MTIME_BASE + Configuration.ACLINT_MTIME_SIZE).U
+    val hitMTIME_w = awaddr >= Configuration.ACLINT_MTIME_BASE.U &&
+                     awaddr < (Configuration.ACLINT_MTIME_BASE + Configuration.ACLINT_MTIME_SIZE).U
+
     /*
     CLINT 模块的所有状态 (从状态机视角考虑):
     1. idle: 空闲状态, 等待来自总线中 AR 或 AW 信道的请求.
@@ -59,35 +71,6 @@ class CLINT(val xLen: Int) extends Module {
       读事务分支:  +-> 2 -> 3      --+
     1 (初始状态) --+                 +-> 1 -> ...
       写事务分支:  +-> 4 -> 5 -> 6 --+
-
-    各状态之间所处理的事务:
-    1 -> 2: (条件: 来自 AR 信道的 arvalid 信号被设置)
-        1. 回复来自 AR 信道的请求.
-        2. 从 AR 信道取读地址 (araddr).
-    2 -> 3: (读事务分支)
-        目前读事务的底层逻辑通过 DPI-C 接口实现:
-        1. 置 DPI-C 接口的读取侧的 readEnable 信号为高电平, 以及 readAddress 信号为读地址.
-        2. 等待若干个时钟周期, 由常量配置数据定义, 见下方对象声明 (通过计时寄存器实现, 读事务完成后归零).
-        3. 从 DPI-C 接口的读取侧的 readData 信号取回所读取的数据.
-        4. 恢复 readEnable 信号为低电平, readAddress 信号为 0.
-        5. 通过 R 信道从总线回复读事务所得的数据 (rdata) 以及读状态 (rresp).
-    3 -> 1: (读事务分支)
-        无 (本次读事务处理完毕, 等待下一个事务).
-    1 -> 4: (条件: 来自 AW 信道的 awvalid 信号被设置)
-        1. 回复来自 AW 信道的请求.
-        2. 从 AW 信道取写地址 (awaddr).
-    4 -> 5: (写事务分支)
-        1. 回复来自 W 信道的请求.
-        2. 从 W 信道取写数据 (wdata) 和写掩码 (wstrb).
-    5 -> 6: (写事务分支)
-        目前写事务的底层逻辑通过 DPI-C 接口实现:
-        1. 置 DPI-C 接口的写入侧的 writeEnable 信号为高电平, writeAddress 信号为写地址,
-           以及 writeData 信号为写数据, writeDataStrobe 信号为写掩码.
-        2. 等待若干个时钟周期, 由常量配置数据定义, 见下方对象声明 (通过计时寄存器实现, 写事务完成后归零).
-        3. 恢复 readEnable 信号为低电平, readAddress 信号为 0.
-        4. 通过 B 信道从总线回复写事务的写状态 (bresp).
-    6 -> 1: (写事务分支)
-        无 (本次写事务处理完毕, 等待下一个事务).
      */
     val s_idle :: s_read_doAction :: s_read_wait_rready :: (
         s_write_wait_wvalid :: s_write_doAction :: s_write_wait_bready :: Nil) = Enum(6)
@@ -125,8 +108,9 @@ class CLINT(val xLen: Int) extends Module {
             } else {
                 readRoutineTimerMax := CLINT.READ_ROUTINE_CLOCK_CYCLES.U
             }
-            rdata := io.dpi.read.readData
-            rresp := 0.U // TODO: 在读事务逻辑中实现真正的 rresp 信号获取.
+            // 读数据: MTIME 地址走 DPI-C, 其他 CLINT 内地址返回 0
+            rdata := Mux(hitMTIME_r, io.dpi.read.readData, 0.U)
+            rresp := 0.U
         }.otherwise {
             io.dpi.read.readEnable := true.B
             io.dpi.read.readAddress := araddr
@@ -154,12 +138,15 @@ class CLINT(val xLen: Int) extends Module {
             } else {
                 writeRoutineTimerMax := CLINT.WRITE_ROUTINE_CLOCK_CYCLES.U
             }
-            bresp := 0.U // TODO: 在写事务逻辑中实现真正的 bresp 信号获取.
+            bresp := 0.U
         }.otherwise {
-            io.dpi.write.writeEnable := true.B
-            io.dpi.write.writeAddress := awaddr
-            io.dpi.write.writeData := wdata
-            io.dpi.write.writeDataStrobe := wstrb
+            // MTIME 写操作: 通过 DPI-C 写入; 非 MTIME 地址: 忽略 (no-op)
+            when(hitMTIME_w) {
+                io.dpi.write.writeEnable := true.B
+                io.dpi.write.writeAddress := awaddr
+                io.dpi.write.writeData := wdata
+                io.dpi.write.writeDataStrobe := wstrb
+            }
             writeRoutineTimer := writeRoutineTimer + 1.U
         }
     }
