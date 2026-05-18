@@ -169,7 +169,21 @@ class MAUnit(val xLen: Int) extends Module {
         rdata := io.memBus.r.bits.data
         rresp := io.memBus.r.bits.resp
     }
-    lsu.io.readDataIn := rdata
+    // 地址低 2 位: 用于 SRAM 和 MROM 的字节/半字对齐
+    val addrLow = Wire(UInt(2.W))
+    addrLow := address(1, 0)
+
+    // SRAM (0x0f000000) 和 MROM (0x20000000) 是 AXI4 原生设备, 数据在自然通道上,
+    // 需要根据 addrLow 移位使 LSU 从最低字节提取.
+    // 通过 APB 桥接的设备 (FLASH/UART/GPIO 等) 已经在 AXI4ToAPB 中处理了对齐.
+    val isSRAM = address >= 0x0f000000L.U && address < 0x0f002000L.U
+    val isMROM = address >= 0x20000000L.U && address < 0x20001000L.U
+    val needShift = isSRAM || isMROM
+
+    // 读数据对齐
+    val rdataShifted = Wire(UInt(xLen.W))
+    rdataShifted := Mux(needShift, rdata >> (addrLow * 8.U), rdata)
+    lsu.io.readDataIn := rdataShifted
     readDataAligned := lsu.io.readDataOut
 
     val writeDataUnaligned = Wire(UInt(xLen.W))
@@ -183,8 +197,28 @@ class MAUnit(val xLen: Int) extends Module {
     io.memBus.aw.bits.burst := AXI4.BURST_FIXED.U
     writeDataUnaligned := prevStageData.storeData
     lsu.io.writeDataIn := writeDataUnaligned
-    io.memBus.w.bits.data := lsu.io.writeDataOut
-    io.memBus.w.bits.strb := lsu.io.dataStrobe
+
+    // 写数据对齐: 对 SRAM/MROM 需要将数据移位到 AXI4 的正确字节通道,
+    // 因为 LSU 总是将数据放在最低字节.
+    // APB 桥接设备通过 AXI4ToAPB 处理对齐, 不需要此处移位.
+    val wdataShiftAmount = Wire(UInt(2.W))
+    when(io.prevStage.bits.lsType === LoadAndStoreUnit.LS_S_B.U) {
+        wdataShiftAmount := addrLow
+    }.elsewhen(io.prevStage.bits.lsType === LoadAndStoreUnit.LS_S_H.U) {
+        wdataShiftAmount := Cat(addrLow(1), false.B)
+    }.otherwise {
+        wdataShiftAmount := 0.U
+    }
+    val wdataShifted = Wire(UInt(xLen.W))
+    val wstrbShifted = Wire(UInt((xLen / 8).W))
+    wdataShifted := Mux(needShift,
+        lsu.io.writeDataOut << (wdataShiftAmount * 8.U),
+        lsu.io.writeDataOut)
+    wstrbShifted := Mux(needShift,
+        lsu.io.dataStrobe << wdataShiftAmount,
+        lsu.io.dataStrobe)
+    io.memBus.w.bits.data := wdataShifted
+    io.memBus.w.bits.strb := wstrbShifted
     io.memBus.w.bits.last := true.B
     when(state === s_store_wait_bvalid && io.memBus.b.fire) {
         bresp := io.memBus.b.bits.resp
