@@ -17,7 +17,7 @@ class EXUnit(val xLen: Int) extends Module {
 
     val io = IO(new Bundle {
         val prevStage = Flipped(Decoupled(Output(new ID_EX_Bundle(xLen))))
-        val nextStage = Decoupled(Output(new EX_MA_Bundle(xLen)))
+        val nextStage = Decoupled(Output(new EX_MEM_Bundle(xLen)))
 
         val dpi = new EXUnitDPIBundle(xLen)
 
@@ -25,7 +25,7 @@ class EXUnit(val xLen: Int) extends Module {
     })
 
     val prevStageData = Wire(new ID_EX_Bundle(xLen))
-    val nextStageData = Wire(new EX_MA_Bundle(xLen))
+    val nextStageData = Wire(new EX_MEM_Bundle(xLen))
 
     /* 
     EX 单元的所有状态 (从状态机视角考虑):

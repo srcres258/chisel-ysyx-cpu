@@ -20,23 +20,23 @@ class WBUnit(val xLen: Int) extends Module {
         val csrWritePort1 = Flipped(new ControlAndStatusRegisterFile.WritePort(xLen))
         val csrWritePort2 = Flipped(new ControlAndStatusRegisterFile.WritePort(xLen))
 
-        val prevStage = Flipped(Decoupled(Output(new MA_WB_Bundle(xLen))))
-        val nextStage = Decoupled(Output(new WB_UPC_Bundle(xLen)))
+        val prevStage = Flipped(Decoupled(Output(new MEM_WB_Bundle(xLen))))
+
+        val pcTargetOut = Output(UInt(xLen.W))
+        val done = Output(Bool())
 
         val dpi = new WBUnitDPIBundle(xLen)
 
         val working = Output(Bool())
     })
 
-    val prevStageData = Wire(new MA_WB_Bundle(xLen))
-    val nextStageData = Wire(new WB_UPC_Bundle(xLen))
+    val prevStageData = Wire(new MEM_WB_Bundle(xLen))
 
     /* 
     WB 单元的所有状态 (从状态机视角考虑):
-    1. idle: 空闲状态, 等待上游 MA 单元传送数据.
-    2. waitData: 接收来自上游 MA 单元传送的数据, 等待数据稳定到达.
-    3. wait_nextStage_ready: 准备下一处理器阶段单元的数据并输送, 然后等待下一处理器阶段单元的 ready 信号.
-       (注: WB 单元的工作在单周期内即可完成, 所以无需存在中间的工作状态.)
+    1. idle: 空闲状态, 等待上游 MEM 单元传送数据.
+    2. waitData: 接收来自上游 MEM 单元传送的数据, 等待数据稳定到达.
+    3. s_writeBack: 执行写回操作 (GPR/CSR 写入), 完成后通知顶层更新 PC.
     
     状态流转方式:
     1 (初始状态) -> 2 -> 3 -> 1 -> ...
@@ -46,24 +46,23 @@ class WBUnit(val xLen: Int) extends Module {
         等待一个时钟周期, 让上游数据平稳传递后再处理.
         (防止因为数据还没到达就处理, 造成使用错误的数据处理事务.)
     2 -> 3:
-        1. 回复上游 MA 单元的传递数据请求.
-        2. 取出来自 MA 单元的数据, 对数据用组合逻辑进行处理, 形成传递给下一处理器阶段单元的数据.
-        3. 向下一处理器阶段单元输送数据.
+        1. 回复上游 MEM 单元的传递数据请求.
+        2. 取出来自 MEM 单元的数据, 对数据用组合逻辑进行处理, 执行写回.
+        3. 通知顶层单元写回已完成.
     3 -> 1:
-        无 (本轮 EX 操作处理完毕, 等待来自上游 MA 单元的下一份数据).
+        等待顶层确认 done 信号后回到空闲状态.
      */
-    val s_idle :: s_waitData :: s_wait_nextStage_ready :: Nil = Enum(3)
+    val s_idle :: s_waitData :: s_writeBack :: Nil = Enum(3)
 
     val state = RegInit(s_idle)
     state := MuxLookup(state, s_idle)(List(
         s_idle -> Mux(io.prevStage.fire, s_waitData, s_idle),
-        s_waitData -> s_wait_nextStage_ready,
-        s_wait_nextStage_ready -> Mux(io.nextStage.fire, s_idle, s_wait_nextStage_ready)
+        s_waitData -> s_writeBack,
+        s_writeBack -> Mux(io.done, s_idle, s_writeBack)
     ))
     io.prevStage.ready := state === s_idle
-    io.nextStage.valid := state === s_wait_nextStage_ready
+    io.done := state === s_writeBack
     prevStageData := io.prevStage.bits
-    io.nextStage.bits := nextStageData
 
     val gprData = Wire(UInt(xLen.W))
     val csrData = Wire(UInt(xLen.W))
@@ -122,10 +121,9 @@ class WBUnit(val xLen: Int) extends Module {
         io.csrWritePort2.writeAddress := ControlAndStatusRegisterFile.CSR_MCAUSE.U
     }
 
-    nextStageData.pcCur := prevStageData.pcCur
-    nextStageData.pcTarget := prevStageData.pcTarget
+    io.pcTargetOut := prevStageData.pcTarget
 
-    io.dpi.wb_nextStage_valid := io.nextStage.valid
+    io.dpi.wb_nextStage_valid := io.done
 
     io.working := state =/= s_idle
 }

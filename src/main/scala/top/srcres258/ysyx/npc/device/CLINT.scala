@@ -6,8 +6,8 @@ import chisel3.util._
 import top.srcres258.ysyx.npc.util.Assertion
 import top.srcres258.ysyx.npc.bus.AXI4Lite
 import top.srcres258.ysyx.npc.dpi.impl.CLINTDPIBundle
-import top.srcres258.ysyx.npc.ysyx_25070190
-import top.srcres258.ysyx.npc.Configuration
+import top.srcres258.ysyx.npc.Top
+import top.srcres258.ysyx.npc.Config
 
 /**
   * ACLINT MTIMER 兼容的 CLINT 模块.
@@ -53,10 +53,10 @@ class CLINT(val xLen: Int) extends Module {
     // 判断地址是否命中 ACLINT MTIME 寄存器范围 (8 字节)
     val araddrIn = Wire(UInt(xLen.W))
     araddrIn := araddr  // 读事务中锁存的读地址
-    val hitMTIME_r = araddrIn >= Configuration.ACLINT_MTIME_BASE.U &&
-                     araddrIn < (Configuration.ACLINT_MTIME_BASE + Configuration.ACLINT_MTIME_SIZE).U
-    val hitMTIME_w = awaddr >= Configuration.ACLINT_MTIME_BASE.U &&
-                     awaddr < (Configuration.ACLINT_MTIME_BASE + Configuration.ACLINT_MTIME_SIZE).U
+    val hitMTIME_r = araddrIn >= Config.ACLINT_MTIME_BASE.U &&
+                     araddrIn < (Config.ACLINT_MTIME_BASE + Config.ACLINT_MTIME_SIZE).U
+    val hitMTIME_w = awaddr >= Config.ACLINT_MTIME_BASE.U &&
+                     awaddr < (Config.ACLINT_MTIME_BASE + Config.ACLINT_MTIME_SIZE).U
 
     /*
     CLINT 模块的所有状态 (从状态机视角考虑):
@@ -103,7 +103,7 @@ class CLINT(val xLen: Int) extends Module {
     }.elsewhen(state === s_read_doAction) {
         when(readRoutineDone) {
             readRoutineTimer := 0.U
-            if (ysyx_25070190.enableRandomDelay) {
+            if (Top.enableRandomDelay) {
                 readRoutineTimerMax := random.LFSR(CLINT.READ_ROUTINE_TIMER_WIDTH)
             } else {
                 readRoutineTimerMax := CLINT.READ_ROUTINE_CLOCK_CYCLES.U
@@ -133,7 +133,7 @@ class CLINT(val xLen: Int) extends Module {
     }.elsewhen(state === s_write_doAction) {
         when(writeRoutineDone) {
             writeRoutineTimer := 0.U
-            if (ysyx_25070190.enableRandomDelay) {
+            if (Top.enableRandomDelay) {
                 writeRoutineTimerMax := random.LFSR(CLINT.WRITE_ROUTINE_TIMER_WIDTH)
             } else {
                 writeRoutineTimerMax := CLINT.WRITE_ROUTINE_CLOCK_CYCLES.U
@@ -156,6 +156,6 @@ class CLINT(val xLen: Int) extends Module {
 object CLINT {
     val READ_ROUTINE_CLOCK_CYCLES: Int = 5
     val WRITE_ROUTINE_CLOCK_CYCLES: Int = 5
-    val READ_ROUTINE_TIMER_WIDTH: Int = Configuration.RANDOM_DELAY_WIDTH
-    val WRITE_ROUTINE_TIMER_WIDTH: Int = Configuration.RANDOM_DELAY_WIDTH
+    val READ_ROUTINE_TIMER_WIDTH: Int = Config.RANDOM_DELAY_WIDTH
+    val WRITE_ROUTINE_TIMER_WIDTH: Int = Config.RANDOM_DELAY_WIDTH
 }

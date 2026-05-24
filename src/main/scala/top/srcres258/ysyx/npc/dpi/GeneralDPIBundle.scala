@@ -2,7 +2,15 @@ package top.srcres258.ysyx.npc.dpi
 
 import chisel3._
 
-import top.srcres258.ysyx.npc.dpi.impl._
+import top.srcres258.ysyx.npc.dpi.impl.ProcessorCoreDPIBundle
+import top.srcres258.ysyx.npc.dpi.impl.CLINTDPIBundle
+import top.srcres258.ysyx.npc.dpi.impl.GeneralPurposeRegisterFileDPIBundle
+import top.srcres258.ysyx.npc.dpi.impl.ControlAndStatusRegisterFileDPIBundle
+import top.srcres258.ysyx.npc.dpi.impl.IFUnitDPIBundle
+import top.srcres258.ysyx.npc.dpi.impl.IDUnitDPIBundle
+import top.srcres258.ysyx.npc.dpi.impl.EXUnitDPIBundle
+import top.srcres258.ysyx.npc.dpi.impl.MEMUnitDPIBundle
+import top.srcres258.ysyx.npc.dpi.impl.WBUnitDPIBundle
 import top.srcres258.ysyx.npc.util.Assertion
 
 /**
@@ -22,7 +30,6 @@ class GeneralDPIBundle(xLen: Int) extends DPIBundle {
     val ifu = new IFUnitDPIBundle(xLen)
     val idu = new IDUnitDPIBundle(xLen)
     val exu = new EXUnitDPIBundle(xLen)
-    val mau = new MAUnitDPIBundle(xLen)
+    val memu = new MEMUnitDPIBundle(xLen)
     val wbu = new WBUnitDPIBundle(xLen)
-    val upcu = new UPCUnitDPIBundle(xLen)
 }
