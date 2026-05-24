@@ -138,8 +138,10 @@ class NPCStandalone(val xLen: Int) extends Module {
     ControlAndStatusRegisterFile.defaultValuesForMaster(csrFile)
 
     val lsu = Module(new LoadAndStoreUnit(xLen))
-    val ram = Module(new SimpleAXI4RAM(xLen))
-    lsu.io.memBus <> ram.io.axi
+    val mem = Module(new StandaloneMemDPI(xLen))
+    mem.io.clock := clock
+    mem.io.reset := reset
+    lsu.io.memBus <> mem.io.axi
 
     val clint = Module(new CLINT(xLen))
 
