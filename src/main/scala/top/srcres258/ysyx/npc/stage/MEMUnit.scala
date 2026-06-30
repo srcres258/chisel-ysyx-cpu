@@ -31,6 +31,7 @@ class MEMUnit(val xLen: Int) extends Module {
     val rresp = RegInit(0.U(2.W))
 
     val prevStageData = Wire(new EX_MEM_Bundle(xLen))
+    val prevStageDataLatched = RegInit(EX_MEM_Bundle(xLen))
     val nextStageData = Wire(new MEM_WB_Bundle(xLen))
 
     val s_idle :: s_waitData :: s_sendLsuReq :: s_waitLsuResp :: (
@@ -40,7 +41,7 @@ class MEMUnit(val xLen: Int) extends Module {
     val state = RegInit(s_idle)
 
     val address = Wire(UInt(xLen.W))
-    address := prevStageData.aluOutput
+    address := Mux(state === s_waitData, prevStageData.aluOutput, prevStageDataLatched.aluOutput)
     val isClintAddr = address >= Config.CLINT_ADDR_BASE.U &&
                       address < (Config.CLINT_ADDR_BASE + Config.CLINT_ADDR_SIZE).U
 
@@ -60,13 +61,16 @@ class MEMUnit(val xLen: Int) extends Module {
     io.prevStage.ready := state === s_idle
     io.nextStage.valid := state === s_wait_nextStage_ready
     prevStageData := io.prevStage.bits
+    when(state === s_waitData) {
+        prevStageDataLatched := prevStageData
+    }
     io.nextStage.bits := nextStageData
 
     io.lsuMemReq.valid := state === s_sendLsuReq
     io.lsuMemReq.bits.addr := address
-    io.lsuMemReq.bits.writeData := prevStageData.storeData
-    io.lsuMemReq.bits.isWrite := io.prevStage.bits.memWriteEnable
-    io.lsuMemReq.bits.lsType := prevStageData.lsType
+    io.lsuMemReq.bits.writeData := prevStageDataLatched.storeData
+    io.lsuMemReq.bits.isWrite := prevStageDataLatched.memWriteEnable
+    io.lsuMemReq.bits.lsType := prevStageDataLatched.lsType
     io.lsuMemResp.ready := state === s_waitLsuResp
     when(state === s_waitLsuResp && io.lsuMemResp.fire) {
         rdata := io.lsuMemResp.bits.readData
@@ -88,43 +92,47 @@ class MEMUnit(val xLen: Int) extends Module {
     }
 
     when(state === s_waitData) {
-        skip := !(io.prevStage.bits.memReadEnable || io.prevStage.bits.memWriteEnable)
+        skip := !(prevStageData.memReadEnable || prevStageData.memWriteEnable)
     }
 
+    val addrByteOffset = prevStageDataLatched.aluOutput(1, 0)
+    val byteShift = Cat(addrByteOffset, 0.U(3.W))
+    val rdataShifted = rdata >> byteShift
+
     val readDataAligned = Wire(UInt(xLen.W))
-    val lsTypeOH = UIntToOH(prevStageData.lsType)
+    val lsTypeOH = UIntToOH(prevStageDataLatched.lsType)
 
     val lsTypeCasesR = Array.fill[UInt](1 << LoadAndStoreUnit.LS_TYPE_LEN)(rdata)
-    lsTypeCasesR(LoadAndStoreUnit.LS_L_B) = rdata(7, 0).asSInt.pad(xLen).asUInt
-    lsTypeCasesR(LoadAndStoreUnit.LS_L_BU) = Cat(Fill(24, 0.U(1.W)), rdata(7, 0))
-    lsTypeCasesR(LoadAndStoreUnit.LS_L_H) = rdata(15, 0).asSInt.pad(xLen).asUInt
-    lsTypeCasesR(LoadAndStoreUnit.LS_L_HU) = Cat(Fill(16, 0.U(1.W)), rdata(15, 0))
+    lsTypeCasesR(LoadAndStoreUnit.LS_L_B) = rdataShifted(7, 0).asSInt.pad(xLen).asUInt
+    lsTypeCasesR(LoadAndStoreUnit.LS_L_BU) = Cat(Fill(24, 0.U(1.W)), rdataShifted(7, 0))
+    lsTypeCasesR(LoadAndStoreUnit.LS_L_H) = rdataShifted(15, 0).asSInt.pad(xLen).asUInt
+    lsTypeCasesR(LoadAndStoreUnit.LS_L_HU) = Cat(Fill(16, 0.U(1.W)), rdataShifted(15, 0))
     readDataAligned := Mux1H(lsTypeOH, lsTypeCasesR.toIndexedSeq)
 
-    nextStageData.pcCur := prevStageData.pcCur
-    nextStageData.pcNext := prevStageData.pcNext
-    nextStageData.pcTarget := prevStageData.pcTarget
+    nextStageData.pcCur := prevStageDataLatched.pcCur
+    nextStageData.pcNext := prevStageDataLatched.pcNext
+    nextStageData.pcTarget := prevStageDataLatched.pcTarget
     nextStageData.memReadData := Mux(skip, 0.U, readDataAligned)
-    nextStageData.aluOutput := prevStageData.aluOutput
-    nextStageData.compBranchEnable := prevStageData.compBranchEnable
-    nextStageData.rs1Data := prevStageData.rs1Data
-    nextStageData.imm := prevStageData.imm
-    nextStageData.rd := prevStageData.rd
-    nextStageData.rs1 := prevStageData.rs1
-    nextStageData.rs2 := prevStageData.rs2
-    nextStageData.csr := prevStageData.csr
-    nextStageData.csrData := prevStageData.csrData
-    nextStageData.zimm := prevStageData.zimm
-    nextStageData.ecallCause := prevStageData.ecallCause
-    nextStageData.regWriteEnable := prevStageData.regWriteEnable
-    nextStageData.csrRegWriteEnable := prevStageData.csrRegWriteEnable
-    nextStageData.regWriteDataSel := prevStageData.regWriteDataSel
-    nextStageData.csrRegWriteDataSel := prevStageData.csrRegWriteDataSel
-    nextStageData.ecallEnable := prevStageData.ecallEnable
+    nextStageData.aluOutput := prevStageDataLatched.aluOutput
+    nextStageData.compBranchEnable := prevStageDataLatched.compBranchEnable
+    nextStageData.rs1Data := prevStageDataLatched.rs1Data
+    nextStageData.imm := prevStageDataLatched.imm
+    nextStageData.rd := prevStageDataLatched.rd
+    nextStageData.rs1 := prevStageDataLatched.rs1
+    nextStageData.rs2 := prevStageDataLatched.rs2
+    nextStageData.csr := prevStageDataLatched.csr
+    nextStageData.csrData := prevStageDataLatched.csrData
+    nextStageData.zimm := prevStageDataLatched.zimm
+    nextStageData.ecallCause := prevStageDataLatched.ecallCause
+    nextStageData.regWriteEnable := prevStageDataLatched.regWriteEnable
+    nextStageData.csrRegWriteEnable := prevStageDataLatched.csrRegWriteEnable
+    nextStageData.regWriteDataSel := prevStageDataLatched.regWriteDataSel
+    nextStageData.csrRegWriteDataSel := prevStageDataLatched.csrRegWriteDataSel
+    nextStageData.ecallEnable := prevStageDataLatched.ecallEnable
 
     when(state === s_wait_nextStage_ready) {
-        io.dpi.memWriteEnable := prevStageData.memWriteEnable
-        io.dpi.memReadEnable := prevStageData.memReadEnable
+        io.dpi.memWriteEnable := prevStageDataLatched.memWriteEnable
+        io.dpi.memReadEnable := prevStageDataLatched.memReadEnable
     }.otherwise {
         io.dpi.memWriteEnable := false.B
         io.dpi.memReadEnable := false.B

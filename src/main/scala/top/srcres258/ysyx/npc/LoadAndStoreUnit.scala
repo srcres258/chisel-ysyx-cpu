@@ -42,6 +42,11 @@ class LoadAndStoreUnit(val xLen: Int) extends Module {
     val pendingWriteData = RegInit(0.U(xLen.W))
     val pendingLsType = RegInit(0.U(LoadAndStoreUnit.LS_TYPE_LEN.W))
 
+    val pendingByteOffset = pendingAddr(1, 0)
+    val pendingByteShift = Cat(pendingByteOffset, 0.U(3.W))
+    val alignedWriteData = pendingWriteData << pendingByteShift
+    val alignedWriteStrobe = calcDataStrobe(pendingLsType) << pendingByteOffset
+
     // === 仲裁器状态: 在空闲时, IFU 取指优先 ===
     val acceptFetch = Wire(Bool())
     val acceptMem = Wire(Bool())
@@ -117,8 +122,8 @@ class LoadAndStoreUnit(val xLen: Int) extends Module {
 
     // === AXI4 W 通道 ===
     io.memBus.w.valid := state === s_write_w
-    io.memBus.w.bits.data := pendingWriteData
-    io.memBus.w.bits.strb := calcDataStrobe(pendingLsType)
+    io.memBus.w.bits.data := alignedWriteData
+    io.memBus.w.bits.strb := alignedWriteStrobe
     io.memBus.w.bits.last := true.B
 
     // === AXI4 B 通道 ===
