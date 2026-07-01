@@ -128,8 +128,12 @@ class EXUnit(val xLen: Int) extends Module {
 
     when(state === s_wait_nextStage_ready) {
         io.dpi.ecallEnable := prevStageData.ecallEnable
+        io.dpi.epcRecoverEnable := prevStageData.epcRecoverEnable
+        io.dpi.exPc := prevStageData.pcCur
     }.otherwise {
         io.dpi.ecallEnable := false.B
+        io.dpi.epcRecoverEnable := false.B
+        io.dpi.exPc := 0.U
     }
     io.dpi.ex_nextStage_valid := io.nextStage.valid
 

@@ -15,6 +15,16 @@ class EXUnitDPIBundle(xLen: Int) extends DPIBundle {
     val ecallEnable = Output(Bool())
 
     /**
+      * 输出：是否发生异常返回 (mret).
+      */
+    val epcRecoverEnable = Output(Bool())
+
+    /**
+      * 输出：当前 EX 阶段指令 PC.
+      */
+    val exPc = Output(UInt(xLen.W))
+
+    /**
       * 输出: 处理器 EX 阶段传给下一阶段的信息的 valid 信号.
       */
     val ex_nextStage_valid = Output(Bool())

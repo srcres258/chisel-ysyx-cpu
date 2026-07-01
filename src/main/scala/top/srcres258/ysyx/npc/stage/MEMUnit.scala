@@ -133,9 +133,25 @@ class MEMUnit(val xLen: Int) extends Module {
     when(state === s_wait_nextStage_ready) {
         io.dpi.memWriteEnable := prevStageDataLatched.memWriteEnable
         io.dpi.memReadEnable := prevStageDataLatched.memReadEnable
+        io.dpi.memAddr := prevStageDataLatched.aluOutput
+        io.dpi.memData := Mux(prevStageDataLatched.memWriteEnable, prevStageDataLatched.storeData, readDataAligned)
+        io.dpi.memStrobe := MuxLookup(prevStageDataLatched.lsType, 0.U((xLen / 8).W))(Seq(
+            LoadAndStoreUnit.LS_S_B.U -> "b0001".U((xLen / 8).W),
+            LoadAndStoreUnit.LS_S_H.U -> "b0011".U((xLen / 8).W),
+            LoadAndStoreUnit.LS_S_W.U -> "b1111".U((xLen / 8).W)
+        ))
+        io.dpi.memResp := rresp
+        io.dpi.memLsType := prevStageDataLatched.lsType
+        io.dpi.memPc := prevStageDataLatched.pcCur
     }.otherwise {
         io.dpi.memWriteEnable := false.B
         io.dpi.memReadEnable := false.B
+        io.dpi.memAddr := 0.U
+        io.dpi.memData := 0.U
+        io.dpi.memStrobe := 0.U
+        io.dpi.memResp := 0.U
+        io.dpi.memLsType := LoadAndStoreUnit.LS_UNKNOWN.U
+        io.dpi.memPc := 0.U
     }
     io.dpi.mem_nextStage_valid := io.nextStage.valid
 
