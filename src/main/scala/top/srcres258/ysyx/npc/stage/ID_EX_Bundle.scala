@@ -17,6 +17,7 @@ class ID_EX_Bundle(xLen: Int) extends StageUnitBundle(xLen) {
 
     val pcCur = UInt(xLen.W)
     val pcNext = UInt(xLen.W)
+    val inst = UInt(xLen.W)
     val rs1Data = UInt(xLen.W)
     val rs2Data = UInt(xLen.W)
     val imm = UInt(xLen.W)
@@ -55,6 +56,7 @@ object ID_EX_Bundle {
     private def setDefaultValues(bundle: ID_EX_Bundle): Unit = {
         bundle.pcCur := 0.U
         bundle.pcNext := 0.U
+        bundle.inst := 0.U
         bundle.rs1Data := 0.U
         bundle.rs2Data := 0.U
         bundle.imm := 0.U

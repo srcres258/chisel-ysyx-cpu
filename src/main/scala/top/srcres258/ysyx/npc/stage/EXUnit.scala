@@ -102,6 +102,7 @@ class EXUnit(val xLen: Int) extends Module {
 
     nextStageData.pcCur := prevStageData.pcCur
     nextStageData.pcNext := prevStageData.pcNext
+    nextStageData.inst := prevStageData.inst
     nextStageData.pcTarget := pcTargetCtrl.io.pcTarget
     nextStageData.aluOutput := aluOutput
     nextStageData.compBranchEnable := branchEnable

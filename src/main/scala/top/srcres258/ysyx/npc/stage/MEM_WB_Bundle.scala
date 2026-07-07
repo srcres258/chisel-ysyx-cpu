@@ -15,6 +15,7 @@ class MEM_WB_Bundle(xLen: Int) extends StageUnitBundle(xLen) {
 
     val pcCur = UInt(xLen.W)
     val pcNext = UInt(xLen.W)
+    val inst = UInt(xLen.W)
     val pcTarget = UInt(xLen.W)
     val memReadData = UInt(xLen.W)
     val aluOutput = UInt(xLen.W)
@@ -34,12 +35,15 @@ class MEM_WB_Bundle(xLen: Int) extends StageUnitBundle(xLen) {
     val regWriteDataSel = UInt(ControlUnit.RD_MUX_SEL_LEN.W)
     val csrRegWriteDataSel = UInt(ControlUnit.CSR_RD_MUX_SEL_LEN.W)
     val ecallEnable = Bool()
+    val inst_jal = Bool()
+    val inst_jalr = Bool()
 }
 
 object MEM_WB_Bundle {
     def setDefaultValues(bundle: MEM_WB_Bundle): Unit = {
         bundle.pcCur := 0.U
         bundle.pcNext := 0.U
+        bundle.inst := 0.U
         bundle.pcTarget := Config.PC_INITIAL_VAL.U
         bundle.memReadData := 0.U
         bundle.aluOutput := 0.U
@@ -58,6 +62,8 @@ object MEM_WB_Bundle {
         bundle.regWriteDataSel := 0.U
         bundle.csrRegWriteDataSel := 0.U
         bundle.ecallEnable := false.B
+        bundle.inst_jal := false.B
+        bundle.inst_jalr := false.B
     }
 
     def apply(xLen: Int): MEM_WB_Bundle = {

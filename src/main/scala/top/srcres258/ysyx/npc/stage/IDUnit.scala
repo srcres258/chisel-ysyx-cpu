@@ -142,6 +142,7 @@ class IDUnit(val xLen: Int) extends Module {
 
     nextStageData.pcCur := prevStageData.pcCur
     nextStageData.pcNext := prevStageData.pcNext
+    nextStageData.inst := prevStageData.inst
     nextStageData.rs1Data := rs1Data
     nextStageData.rs2Data := rs2Data
     nextStageData.imm := imm
@@ -174,25 +175,9 @@ class IDUnit(val xLen: Int) extends Module {
     nextStageData.inst_jalr := cu.io.inst_jalr
 
     when(state === s_wait_nextStage_ready) {
-        io.dpi.rs1 := rs1
-        io.dpi.rs2 := rs2
-        io.dpi.rd := rd
-        io.dpi.imm := imm
-        io.dpi.rs1Data := rs1Data
-        io.dpi.rs2Data := rs2Data
         io.dpi.inst := prevStageData.inst
-        io.dpi.inst_jal := cu.io.inst_jal
-        io.dpi.inst_jalr := cu.io.inst_jalr
     }.otherwise {
-        io.dpi.rs1 := 0.U
-        io.dpi.rs2 := 0.U
-        io.dpi.rd := 0.U
-        io.dpi.imm := 0.U
-        io.dpi.rs1Data := 0.U
-        io.dpi.rs2Data := 0.U
         io.dpi.inst := 0.U
-        io.dpi.inst_jal := false.B
-        io.dpi.inst_jalr := false.B
     }
     io.dpi.id_nextStage_valid := io.nextStage.valid
 

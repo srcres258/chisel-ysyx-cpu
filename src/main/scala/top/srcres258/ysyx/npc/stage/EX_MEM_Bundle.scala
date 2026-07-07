@@ -15,6 +15,7 @@ class EX_MEM_Bundle(xLen: Int) extends StageUnitBundle(xLen) {
 
     val pcCur = UInt(xLen.W)
     val pcNext = UInt(xLen.W)
+    val inst = UInt(xLen.W)
     val pcTarget = UInt(xLen.W)
     // 注: 由于分支目标地址本身也经 ALU 计算, 所以当分支启用时,
     // aluOutput 中存的就是分支目标地址.
@@ -48,6 +49,7 @@ object EX_MEM_Bundle {
     def setDefaultValues(bundle: EX_MEM_Bundle): Unit = {
         bundle.pcCur := 0.U
         bundle.pcNext := 0.U
+        bundle.inst := 0.U
         bundle.pcTarget := 0.U
         bundle.aluOutput := 0.U
         bundle.compBranchEnable := false.B

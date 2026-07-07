@@ -123,6 +123,28 @@ class WBUnit(val xLen: Int) extends Module {
 
     io.pcTargetOut := prevStageData.pcTarget
 
+    when(io.done) {
+        io.dpi.pc := prevStageData.pcCur
+        io.dpi.pcNext := prevStageData.pcNext
+        io.dpi.inst := prevStageData.inst
+        io.dpi.rs1 := prevStageData.rs1
+        io.dpi.rd := prevStageData.rd
+        io.dpi.imm := prevStageData.imm
+        io.dpi.rs1Data := prevStageData.rs1Data
+        io.dpi.inst_jal := prevStageData.inst_jal
+        io.dpi.inst_jalr := prevStageData.inst_jalr
+    }.otherwise {
+        io.dpi.pc := 0.U
+        io.dpi.pcNext := 0.U
+        io.dpi.inst := 0.U
+        io.dpi.rs1 := 0.U
+        io.dpi.rd := 0.U
+        io.dpi.imm := 0.U
+        io.dpi.rs1Data := 0.U
+        io.dpi.inst_jal := false.B
+        io.dpi.inst_jalr := false.B
+    }
+
     io.dpi.wb_nextStage_valid := io.done
 
     io.working := state =/= s_idle

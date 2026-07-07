@@ -111,6 +111,7 @@ class MEMUnit(val xLen: Int) extends Module {
 
     nextStageData.pcCur := prevStageDataLatched.pcCur
     nextStageData.pcNext := prevStageDataLatched.pcNext
+    nextStageData.inst := prevStageDataLatched.inst
     nextStageData.pcTarget := prevStageDataLatched.pcTarget
     nextStageData.memReadData := Mux(skip, 0.U, readDataAligned)
     nextStageData.aluOutput := prevStageDataLatched.aluOutput
@@ -129,6 +130,8 @@ class MEMUnit(val xLen: Int) extends Module {
     nextStageData.regWriteDataSel := prevStageDataLatched.regWriteDataSel
     nextStageData.csrRegWriteDataSel := prevStageDataLatched.csrRegWriteDataSel
     nextStageData.ecallEnable := prevStageDataLatched.ecallEnable
+    nextStageData.inst_jal := prevStageDataLatched.inst_jal
+    nextStageData.inst_jalr := prevStageDataLatched.inst_jalr
 
     when(state === s_wait_nextStage_ready) {
         io.dpi.memWriteEnable := prevStageDataLatched.memWriteEnable
