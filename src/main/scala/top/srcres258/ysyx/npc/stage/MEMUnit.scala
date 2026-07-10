@@ -29,6 +29,7 @@ class MEMUnit(val xLen: Int) extends Module {
     val skip = RegInit(false.B)
     val rdata = RegInit(0.U(xLen.W))
     val rresp = RegInit(0.U(2.W))
+    val memPc = RegInit(0.U(xLen.W))
 
     val prevStageData = Wire(new EX_MEM_Bundle(xLen))
     val prevStageDataLatched = RegInit(EX_MEM_Bundle(xLen))
@@ -65,6 +66,12 @@ class MEMUnit(val xLen: Int) extends Module {
         prevStageDataLatched := prevStageData
     }
     io.nextStage.bits := nextStageData
+
+    when(state === s_waitData) {
+        memPc := io.prevStage.bits.pcCur
+    }.elsewhen(state === s_idle) {
+        memPc := 0.U
+    }
 
     io.lsuMemReq.valid := state === s_sendLsuReq
     io.lsuMemReq.bits.addr := address
@@ -145,7 +152,7 @@ class MEMUnit(val xLen: Int) extends Module {
         ))
         io.dpi.memResp := rresp
         io.dpi.memLsType := prevStageDataLatched.lsType
-        io.dpi.memPc := prevStageDataLatched.pcCur
+        io.dpi.memPc := memPc
     }.otherwise {
         io.dpi.memWriteEnable := false.B
         io.dpi.memReadEnable := false.B
@@ -154,7 +161,7 @@ class MEMUnit(val xLen: Int) extends Module {
         io.dpi.memStrobe := 0.U
         io.dpi.memResp := 0.U
         io.dpi.memLsType := LoadAndStoreUnit.LS_UNKNOWN.U
-        io.dpi.memPc := 0.U
+        io.dpi.memPc := memPc
     }
     io.dpi.mem_nextStage_valid := io.nextStage.valid
 
