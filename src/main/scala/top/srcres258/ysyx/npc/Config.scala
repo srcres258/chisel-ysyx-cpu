@@ -6,6 +6,7 @@ object Config {
     case object YsyxSoCIntegrated extends IntegrationMode
 
     var INTEGRATION_MODE: IntegrationMode = YsyxSoCIntegrated
+    var ENABLE_DPI: Boolean = true
 
     val XLEN: Int = 32
 

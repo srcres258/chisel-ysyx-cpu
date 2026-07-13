@@ -8,6 +8,7 @@ import firrtl.AnnotationSeq
 
 import top.srcres258.ysyx.npc.stage._
 import top.srcres258.ysyx.npc.dpi.GeneralDPIAdapter
+import top.srcres258.ysyx.npc.dpi.GeneralDPISignalWrapper
 import top.srcres258.ysyx.npc.dpi.GeneralDPIBundle
 import top.srcres258.ysyx.npc.regfile.GeneralPurposeRegisterFile
 import top.srcres258.ysyx.npc.regfile.ControlAndStatusRegisterFile
@@ -116,8 +117,13 @@ class NPCWithSoC(val xLen: Int) extends Module {
     generalDPI.memu <> memu.io.dpi
     generalDPI.wbu <> wbu.io.dpi
 
-    val dpi = Module(new GeneralDPIAdapter(xLen))
-    dpi.io <> generalDPI
+    if (Config.ENABLE_DPI) {
+        val dpi = Module(new GeneralDPIAdapter(xLen))
+        dpi.io <> generalDPI
+    } else {
+        val dpi = Module(new GeneralDPISignalWrapper(xLen))
+        dpi.io <> generalDPI
+    }
 }
 
 class NPCStandalone(val xLen: Int) extends Module {
@@ -138,10 +144,15 @@ class NPCStandalone(val xLen: Int) extends Module {
     ControlAndStatusRegisterFile.defaultValuesForMaster(csrFile)
 
     val lsu = Module(new LoadAndStoreUnit(xLen))
-    val mem = Module(new StandaloneMemDPI(xLen))
-    mem.io.clock := clock
-    mem.io.reset := reset
-    lsu.io.memBus <> mem.io.axi
+    if (Config.ENABLE_DPI) {
+        val mem = Module(new StandaloneMemDPI(xLen))
+        mem.io.clock := clock
+        mem.io.reset := reset
+        lsu.io.memBus <> mem.io.axi
+    } else {
+        val mem = Module(new SimpleAXI4RAM(xLen))
+        lsu.io.memBus <> mem.io.axi
+    }
 
     val clint = Module(new CLINT(xLen))
 
@@ -207,8 +218,13 @@ class NPCStandalone(val xLen: Int) extends Module {
     generalDPI.memu <> memu.io.dpi
     generalDPI.wbu <> wbu.io.dpi
 
-    val dpi = Module(new GeneralDPIAdapter(xLen))
-    dpi.io <> generalDPI
+    if (Config.ENABLE_DPI) {
+        val dpi = Module(new GeneralDPIAdapter(xLen))
+        dpi.io <> generalDPI
+    } else {
+        val dpi = Module(new GeneralDPISignalWrapper(xLen))
+        dpi.io <> generalDPI
+    }
 }
 
 object Top extends App {
@@ -322,15 +338,18 @@ object Top extends App {
 
     val enableRandomDelay = args.contains("enableRandomDelay")
     val isStandalone = args.contains("standalone")
+    val disableDPI = args.contains("disableDPI")
 
     if (isStandalone) {
         Config.INTEGRATION_MODE = Config.Standalone
     }
+    Config.ENABLE_DPI = !disableDPI
 
     val cs = new ChiselStage
     val modeStr = if (isStandalone) "Standalone" else "YsyxSoC"
     println(s"Emitting SystemVerilog for ProcessorCore (mode: $modeStr) with arguments:")
     println(s"  enableRandomDelay: $enableRandomDelay")
+    println(s"  enableDPI: ${Config.ENABLE_DPI}")
     cs.execute(
         Array(
             "--target", "systemverilog",
