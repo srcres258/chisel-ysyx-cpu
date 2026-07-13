@@ -44,7 +44,7 @@ object MEM_WB_Bundle {
         bundle.pcCur := 0.U
         bundle.pcNext := 0.U
         bundle.inst := 0.U
-        bundle.pcTarget := Config.PC_INITIAL_VAL.U
+        bundle.pcTarget := Config.pcInitialVal.U
         bundle.memReadData := 0.U
         bundle.aluOutput := 0.U
         bundle.compBranchEnable := false.B

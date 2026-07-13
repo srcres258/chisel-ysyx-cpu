@@ -43,8 +43,8 @@ class MEMUnit(val xLen: Int) extends Module {
 
     val address = Wire(UInt(xLen.W))
     address := Mux(state === s_waitData, prevStageData.aluOutput, prevStageDataLatched.aluOutput)
-    val isClintAddr = address >= Config.CLINT_ADDR_BASE.U &&
-                      address < (Config.CLINT_ADDR_BASE + Config.CLINT_ADDR_SIZE).U
+    val isClintAddr = address >= Config.clintAddrBase.U &&
+                      address < (Config.clintAddrBase + Config.clintAddrSize).U
 
     state := MuxLookup(state, s_idle)(List(
         s_idle -> Mux(io.prevStage.fire, s_waitData, s_idle),

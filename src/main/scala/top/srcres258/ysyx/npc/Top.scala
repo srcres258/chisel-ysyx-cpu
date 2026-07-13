@@ -39,7 +39,7 @@ class NPCWithSoC(val xLen: Int) extends Module {
 
     val executing = RegInit(false.B)
 
-    val pc_r = RegInit(Config.PC_INITIAL_VAL.U(xLen.W))
+    val pc_r = RegInit(Config.pcInitialVal.U(xLen.W))
 
     val gprFile = Module(new GeneralPurposeRegisterFile(xLen))
     val csrFile = Module(new ControlAndStatusRegisterFile(xLen))
@@ -117,7 +117,7 @@ class NPCWithSoC(val xLen: Int) extends Module {
     generalDPI.memu <> memu.io.dpi
     generalDPI.wbu <> wbu.io.dpi
 
-    if (Config.ENABLE_DPI) {
+    if (Config.enableDPI) {
         val dpi = Module(new GeneralDPIAdapter(xLen))
         dpi.io <> generalDPI
     } else {
@@ -144,7 +144,7 @@ class NPCStandalone(val xLen: Int) extends Module {
     ControlAndStatusRegisterFile.defaultValuesForMaster(csrFile)
 
     val lsu = Module(new LoadAndStoreUnit(xLen))
-    if (Config.ENABLE_DPI) {
+    if (Config.enableDPI) {
         val mem = Module(new StandaloneMemDPI(xLen))
         mem.io.clock := clock
         mem.io.reset := reset
@@ -218,7 +218,7 @@ class NPCStandalone(val xLen: Int) extends Module {
     generalDPI.memu <> memu.io.dpi
     generalDPI.wbu <> wbu.io.dpi
 
-    if (Config.ENABLE_DPI) {
+    if (Config.enableDPI) {
         val dpi = Module(new GeneralDPIAdapter(xLen))
         dpi.io <> generalDPI
     } else {
@@ -341,15 +341,15 @@ object Top extends App {
     val disableDPI = args.contains("disableDPI")
 
     if (isStandalone) {
-        Config.INTEGRATION_MODE = Config.Standalone
+        Config.integrationMode = Config.Standalone
     }
-    Config.ENABLE_DPI = !disableDPI
+    Config.enableDPI = !disableDPI
 
     val cs = new ChiselStage
     val modeStr = if (isStandalone) "Standalone" else "YsyxSoC"
     println(s"Emitting SystemVerilog for ProcessorCore (mode: $modeStr) with arguments:")
     println(s"  enableRandomDelay: $enableRandomDelay")
-    println(s"  enableDPI: ${Config.ENABLE_DPI}")
+    println(s"  enableDPI: ${Config.enableDPI}")
     cs.execute(
         Array(
             "--target", "systemverilog",
@@ -360,9 +360,9 @@ object Top extends App {
         ),
         Seq(ChiselGeneratorAnnotation(() =>
             if (isStandalone)
-                new NPCStandalone(xLen = Config.XLEN)
+                new NPCStandalone(xLen = Config.xlen)
             else
-                new NPCWithSoC(xLen = Config.XLEN)
+                new NPCWithSoC(xLen = Config.xlen)
         ))
     )
 }

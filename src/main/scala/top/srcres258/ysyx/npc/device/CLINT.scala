@@ -53,10 +53,10 @@ class CLINT(val xLen: Int) extends Module {
     // 判断地址是否命中 ACLINT MTIME 寄存器范围 (8 字节)
     val araddrIn = Wire(UInt(xLen.W))
     araddrIn := araddr  // 读事务中锁存的读地址
-    val hitMTIME_r = araddrIn >= Config.ACLINT_MTIME_BASE.U &&
-                     araddrIn < (Config.ACLINT_MTIME_BASE + Config.ACLINT_MTIME_SIZE).U
-    val hitMTIME_w = awaddr >= Config.ACLINT_MTIME_BASE.U &&
-                     awaddr < (Config.ACLINT_MTIME_BASE + Config.ACLINT_MTIME_SIZE).U
+    val hitMTIME_r = araddrIn >= Config.aclintMtimeBase.U &&
+                     araddrIn < (Config.aclintMtimeBase + Config.aclintMtimeSize).U
+    val hitMTIME_w = awaddr >= Config.aclintMtimeBase.U &&
+                     awaddr < (Config.aclintMtimeBase + Config.aclintMtimeSize).U
 
     /*
     CLINT 模块的所有状态 (从状态机视角考虑):
@@ -156,6 +156,6 @@ class CLINT(val xLen: Int) extends Module {
 object CLINT {
     val READ_ROUTINE_CLOCK_CYCLES: Int = 5
     val WRITE_ROUTINE_CLOCK_CYCLES: Int = 5
-    val READ_ROUTINE_TIMER_WIDTH: Int = Config.RANDOM_DELAY_WIDTH
-    val WRITE_ROUTINE_TIMER_WIDTH: Int = Config.RANDOM_DELAY_WIDTH
+    val READ_ROUTINE_TIMER_WIDTH: Int = Config.randomDelayWidth
+    val WRITE_ROUTINE_TIMER_WIDTH: Int = Config.randomDelayWidth
 }

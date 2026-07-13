@@ -5,30 +5,30 @@ object Config {
     case object Standalone extends IntegrationMode
     case object YsyxSoCIntegrated extends IntegrationMode
 
-    var INTEGRATION_MODE: IntegrationMode = YsyxSoCIntegrated
-    var ENABLE_DPI: Boolean = true
+    var integrationMode: IntegrationMode = YsyxSoCIntegrated
+    var enableDPI: Boolean = true
 
-    val XLEN: Int = 32
+    val xlen: Int = 32
 
-    val PHYS_MEMORY_OFFSET: BigInt = BigInt(0x80000000L)
-    val PHYS_MEMORY_SIZE: BigInt = BigInt(0xb0000000L - 0x80000000L)
+    val physMemoryOffset: BigInt = BigInt(0x80000000L)
+    val physMemorySize: BigInt = BigInt(0xb0000000L - 0x80000000L)
 
-    val UART_MEMORY_OFFSET: BigInt = BigInt(0x10000000L)
-    val UART_MEMORY_SIZE: BigInt = BigInt(0x1000L)
+    val uartMemoryOffset: BigInt = BigInt(0x10000000L)
+    val uartMemorySize: BigInt = BigInt(0x1000L)
 
-    val ACLINT_MTIME_BASE: BigInt = BigInt(0x0200bff8L)
-    val ACLINT_MTIME_SIZE: BigInt = BigInt(8)
+    val aclintMtimeBase: BigInt = BigInt(0x0200bff8L)
+    val aclintMtimeSize: BigInt = BigInt(8)
 
-    val CLINT_ADDR_BASE: BigInt = BigInt(0x02000000L)
-    val CLINT_ADDR_SIZE: BigInt = BigInt(0x10000L)
+    val clintAddrBase: BigInt = BigInt(0x02000000L)
+    val clintAddrSize: BigInt = BigInt(0x10000L)
 
-    val PC_INITIAL_VAL: BigInt = BigInt(0x30000000L)
+    val pcInitialVal: BigInt = BigInt(0x30000000L)
 
-    val RANDOM_DELAY_WIDTH: Int = 4
+    val randomDelayWidth: Int = 4
 
     object Arbiter {
-        val ARBITER_MAX_MASTER_AMOUNT: Int = 4
-        val ARBITER_MASTER_IDX_IF_UNIT: Int = 0
-        val ARBITER_MASTER_IDX_MEM_UNIT: Int = 1
+        val arbiterMaxMasterAmount: Int = 4
+        val arbiterMasterIdxIfUnit: Int = 0
+        val arbiterMasterIdxMemUnit: Int = 1
     }
 }
