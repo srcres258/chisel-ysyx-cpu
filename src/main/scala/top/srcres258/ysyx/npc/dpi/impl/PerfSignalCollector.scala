@@ -5,6 +5,8 @@ import chisel3.util._
 
 import top.srcres258.ysyx.npc.Config
 import top.srcres258.ysyx.npc.util.Assertion
+import top.srcres258.ysyx.npc.util.MemoryRange
+import top.srcres258.ysyx.npc.util.SoCMemoryRanges
 
 /**
   * 性能信号采集器.
@@ -18,6 +20,19 @@ import top.srcres258.ysyx.npc.util.Assertion
   */
 class PerfSignalCollector(val xLen: Int) extends Module {
     Assertion.assertProcessorXLen(xLen)
+
+    private val socPeripheralNames = Set(
+        "uart",
+        "gpio",
+        "keyboard",
+        "vga",
+        "spi_controller"
+    )
+
+    private val socPeripheralRanges: Seq[MemoryRange] =
+        SoCMemoryRanges.DEVICES.collect {
+            case (name, range) if socPeripheralNames.contains(name) => range
+        }
 
     // ---- RV32I opcode 常量 (局部定义, 不引入额外模块依赖) ----
     private val OP_R_TYPE             = "b0110011".U(7.W)
@@ -199,6 +214,9 @@ class PerfSignalCollector(val xLen: Int) extends Module {
     // 5. 内存访问请求 (PerfMemDPIBundle)
     // ================================================================
 
+    private def isInAnyRange(addr: UInt, ranges: Seq[MemoryRange]): Bool =
+        ranges.map(_.isInRange(addr)).foldLeft(false.B)(_ || _)
+
     /** 非 store 的 LSU 请求触发: load */
     io.perf.mem.load_req_fire :=
         io.mem_lsu_req_valid && io.mem_lsu_req_ready && !io.mem_lsu_req_isWrite
@@ -210,16 +228,20 @@ class PerfSignalCollector(val xLen: Int) extends Module {
     /**
       * MMIO 请求触发:
       *  - CLINT 读请求 (通过 clintBus.ar.fire)
-      *  - CLINT 写请求 (通过 lsuMemReq, 地址在 CLINT 范围且 isWrite)
+      *  - CLINT 写请求 (通过 LSU 请求, 地址在 CLINT 范围且 isWrite)
+      *  - SoC 外设请求 (UART/GPIO/Keyboard/VGA/SPI, 通过 LSU 请求)
       */
     val clintAddrBase = Config.clintAddrBase.U(xLen.W)
     val clintAddrEnd  = (Config.clintAddrBase + Config.clintAddrSize).U(xLen.W)
     val isClintAddr = io.mem_lsu_req_addr >= clintAddrBase &&
-                      io.mem_lsu_req_addr < clintAddrEnd
+                       io.mem_lsu_req_addr < clintAddrEnd
     val clintWriteFire = io.mem_lsu_req_valid && io.mem_lsu_req_ready &&
-                         io.mem_lsu_req_isWrite && isClintAddr
+                          io.mem_lsu_req_isWrite && isClintAddr
 
-    io.perf.mem.mmio_req_fire := io.mem_clint_ar_fire || clintWriteFire
+    val socPeripheralFire = io.mem_lsu_req_valid && io.mem_lsu_req_ready &&
+                            isInAnyRange(io.mem_lsu_req_addr, socPeripheralRanges)
+
+    io.perf.mem.mmio_req_fire := io.mem_clint_ar_fire || clintWriteFire || socPeripheralFire
 
     // ================================================================
     // 6. 异常/陷阱 (PerfTrapDPIBundle)
