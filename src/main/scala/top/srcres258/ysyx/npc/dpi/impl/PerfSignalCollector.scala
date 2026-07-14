@@ -98,8 +98,8 @@ class PerfSignalCollector(val xLen: Int) extends Module {
     // 1. 核心信号 (PerfCoreDPIBundle)
     // ================================================================
 
-    /** 核心正在运行: executing 且不在复位 */
-    io.perf.core.running   := io.core_executing && !reset.asBool
+    /** 核心正在运行: 非复位状态下的每个时钟周期 */
+    io.perf.core.running   := !reset.asBool
 
     /** 本周期有指令退休 */
     io.perf.core.commitFire := io.wb_done

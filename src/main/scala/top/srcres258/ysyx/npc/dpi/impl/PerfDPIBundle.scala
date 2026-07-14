@@ -9,7 +9,7 @@ import top.srcres258.ysyx.npc.util.Assertion
   * 核心性能计数子束: 处理器整体运行状态.
   *
   * 与 C++ counter 映射:
-  *  running  → core.cycle
+  *  running (non-reset clock) → core.cycle
   *  commitFire → core.instret
   *  busy → core.busy.cycle
   *  stall → core.stall.cycle
@@ -17,7 +17,7 @@ import top.srcres258.ysyx.npc.util.Assertion
 class PerfCoreDPIBundle(xLen: Int) extends DPIBundle {
     Assertion.assertProcessorXLen(xLen)
 
-    /** 处理器正在执行 (executing && !reset). 每个周期 stable 时为 1 */
+    /** 核心时钟有效 (非复位状态下每个周期为 1) */
     val running = Output(Bool())
     /** 本周期有指令退休 (WB done) */
     val commitFire = Output(Bool())
