@@ -117,6 +117,34 @@ class NPCWithSoC(val xLen: Int) extends Module {
     generalDPI.memu <> memu.io.dpi
     generalDPI.wbu <> wbu.io.dpi
 
+    // Perf signal collector — gathers semantic perf signals from stage IOs
+    val perfCollector = Module(new PerfSignalCollector(xLen))
+    perfCollector.io.core_executing := executing
+    perfCollector.io.if_working  := ifu.io.working
+    perfCollector.io.id_working  := idu.io.working
+    perfCollector.io.ex_working  := exu.io.working
+    perfCollector.io.mem_working := memu.io.working
+    perfCollector.io.wb_working  := wbu.io.working
+    perfCollector.io.wb_done      := wbu.io.done
+    perfCollector.io.wb_inst      := wbu.io.dpi.inst
+    perfCollector.io.wb_inst_jal  := wbu.io.dpi.inst_jal
+    perfCollector.io.wb_inst_jalr := wbu.io.dpi.inst_jalr
+    perfCollector.io.if_nextStage_valid  := ifu.io.nextStage.valid
+    perfCollector.io.if_ifetch_req_valid  := ifu.io.lsuIfetchReq.valid
+    perfCollector.io.if_ifetch_req_ready  := ifu.io.lsuIfetchReq.ready
+    perfCollector.io.if_ifetch_resp_valid := ifu.io.lsuIfetchResp.valid
+    perfCollector.io.if_ifetch_resp_ready := ifu.io.lsuIfetchResp.ready
+    perfCollector.io.mem_nextStage_valid   := memu.io.nextStage.valid
+    perfCollector.io.mem_lsu_req_valid     := memu.io.lsuMemReq.valid
+    perfCollector.io.mem_lsu_req_ready     := memu.io.lsuMemReq.ready
+    perfCollector.io.mem_lsu_req_isWrite   := memu.io.lsuMemReq.bits.isWrite
+    perfCollector.io.mem_lsu_req_addr      := memu.io.lsuMemReq.bits.addr
+    perfCollector.io.mem_lsu_resp_valid    := memu.io.lsuMemResp.valid
+    perfCollector.io.mem_lsu_resp_ready    := memu.io.lsuMemResp.ready
+    perfCollector.io.mem_clint_ar_fire     := memu.io.clintBus.ar.valid && memu.io.clintBus.ar.ready
+    perfCollector.io.wb_csr_write2_enable  := wbu.io.csrWritePort2.writeEnable
+    generalDPI.perf <> perfCollector.io.perf
+
     if (Config.enableDPI) {
         val dpi = Module(new GeneralDPIAdapter(xLen))
         dpi.io <> generalDPI
@@ -217,6 +245,34 @@ class NPCStandalone(val xLen: Int) extends Module {
     generalDPI.exu <> exu.io.dpi
     generalDPI.memu <> memu.io.dpi
     generalDPI.wbu <> wbu.io.dpi
+
+    // Perf signal collector — gathers semantic perf signals from stage IOs
+    val perfCollector = Module(new PerfSignalCollector(xLen))
+    perfCollector.io.core_executing := executing
+    perfCollector.io.if_working  := ifu.io.working
+    perfCollector.io.id_working  := idu.io.working
+    perfCollector.io.ex_working  := exu.io.working
+    perfCollector.io.mem_working := memu.io.working
+    perfCollector.io.wb_working  := wbu.io.working
+    perfCollector.io.wb_done      := wbu.io.done
+    perfCollector.io.wb_inst      := wbu.io.dpi.inst
+    perfCollector.io.wb_inst_jal  := wbu.io.dpi.inst_jal
+    perfCollector.io.wb_inst_jalr := wbu.io.dpi.inst_jalr
+    perfCollector.io.if_nextStage_valid  := ifu.io.nextStage.valid
+    perfCollector.io.if_ifetch_req_valid  := ifu.io.lsuIfetchReq.valid
+    perfCollector.io.if_ifetch_req_ready  := ifu.io.lsuIfetchReq.ready
+    perfCollector.io.if_ifetch_resp_valid := ifu.io.lsuIfetchResp.valid
+    perfCollector.io.if_ifetch_resp_ready := ifu.io.lsuIfetchResp.ready
+    perfCollector.io.mem_nextStage_valid   := memu.io.nextStage.valid
+    perfCollector.io.mem_lsu_req_valid     := memu.io.lsuMemReq.valid
+    perfCollector.io.mem_lsu_req_ready     := memu.io.lsuMemReq.ready
+    perfCollector.io.mem_lsu_req_isWrite   := memu.io.lsuMemReq.bits.isWrite
+    perfCollector.io.mem_lsu_req_addr      := memu.io.lsuMemReq.bits.addr
+    perfCollector.io.mem_lsu_resp_valid    := memu.io.lsuMemResp.valid
+    perfCollector.io.mem_lsu_resp_ready    := memu.io.lsuMemResp.ready
+    perfCollector.io.mem_clint_ar_fire     := memu.io.clintBus.ar.valid && memu.io.clintBus.ar.ready
+    perfCollector.io.wb_csr_write2_enable  := wbu.io.csrWritePort2.writeEnable
+    generalDPI.perf <> perfCollector.io.perf
 
     if (Config.enableDPI) {
         val dpi = Module(new GeneralDPIAdapter(xLen))

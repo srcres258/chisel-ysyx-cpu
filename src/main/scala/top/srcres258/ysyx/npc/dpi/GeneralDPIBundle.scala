@@ -11,6 +11,7 @@ import top.srcres258.ysyx.npc.dpi.impl.IDUnitDPIBundle
 import top.srcres258.ysyx.npc.dpi.impl.EXUnitDPIBundle
 import top.srcres258.ysyx.npc.dpi.impl.MEMUnitDPIBundle
 import top.srcres258.ysyx.npc.dpi.impl.WBUnitDPIBundle
+import top.srcres258.ysyx.npc.dpi.impl.PerfDPIBundle
 import top.srcres258.ysyx.npc.util.Assertion
 
 /**
@@ -32,4 +33,5 @@ class GeneralDPIBundle(xLen: Int) extends DPIBundle {
     val exu = new EXUnitDPIBundle(xLen)
     val memu = new MEMUnitDPIBundle(xLen)
     val wbu = new WBUnitDPIBundle(xLen)
+    val perf = new PerfDPIBundle(xLen)
 }
