@@ -411,7 +411,7 @@ object Top extends App {
             "--target", "systemverilog",
             "--target-dir", "generated",
             "--split-verilog",
-            "--firtool-option", "-lowering-options=disallowLocalVariables",
+            "--firtool-option", "-lowering-options=disallowLocalVariables,disallowPackedArrays",
             "--firtool-option", "--verification-flavor=if-else-fatal"
         ),
         Seq(ChiselGeneratorAnnotation(() =>
