@@ -144,17 +144,6 @@ object DPIInline {
         )
     }
 
-    def generalDPISignalWrapper(moduleName: String, io: GeneralDPIBundle): String = {
-        val port = portName _
-        renderModule(
-            moduleName,
-            io,
-            Seq(
-                s"assign ${port("clint.read.readData")} = 32'h0;"
-            )
-        )
-    }
-
     def standaloneMemEnabled(moduleName: String, io: Bundle): String = {
         val port = portName _
         renderModule(

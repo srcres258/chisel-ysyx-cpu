@@ -8,6 +8,7 @@ import top.srcres258.ysyx.npc.ArithmeticLogicUnit
 import top.srcres258.ysyx.npc.ComparatorUnit
 import top.srcres258.ysyx.npc.LoadAndStoreUnit
 import top.srcres258.ysyx.npc.ImmediateSignExtend
+import top.srcres258.ysyx.npc.Config
 import top.srcres258.ysyx.npc.regfile.GeneralPurposeRegisterFile
 import top.srcres258.ysyx.npc.regfile.ControlAndStatusRegisterFile
 import top.srcres258.ysyx.npc.dpi.impl.IDUnitDPIBundle
@@ -28,10 +29,10 @@ class IDUnit(val xLen: Int) extends Module {
         val prevStage = Flipped(Decoupled(Output(new IF_ID_Bundle(xLen))))
         val nextStage = Decoupled(Output(new ID_EX_Bundle(xLen)))
 
-        val dpi = new IDUnitDPIBundle(xLen)
-
         val working = Output(Bool())
     })
+
+    val dpi = if (Config.enableDPI) Some(IO(new IDUnitDPIBundle(xLen))) else None
 
     val prevStageData = Wire(new IF_ID_Bundle(xLen))
     val nextStageData = Wire(new ID_EX_Bundle(xLen))
@@ -174,12 +175,14 @@ class IDUnit(val xLen: Int) extends Module {
     nextStageData.inst_jal := cu.io.inst_jal
     nextStageData.inst_jalr := cu.io.inst_jalr
 
-    when(state === s_wait_nextStage_ready) {
-        io.dpi.inst := prevStageData.inst
-    }.otherwise {
-        io.dpi.inst := 0.U
+    dpi.foreach { dpiBundle =>
+        when(state === s_wait_nextStage_ready) {
+            dpiBundle.inst := prevStageData.inst
+        }.otherwise {
+            dpiBundle.inst := 0.U
+        }
+        dpiBundle.id_nextStage_valid := io.nextStage.valid
     }
-    io.dpi.id_nextStage_valid := io.nextStage.valid
 
     io.working := state =/= s_idle
 }

@@ -3,6 +3,7 @@ package top.srcres258.ysyx.npc.regfile
 import chisel3._
 import chisel3.util._
 
+import top.srcres258.ysyx.npc.Config
 import top.srcres258.ysyx.npc.dpi.impl.ControlAndStatusRegisterFileDPIBundle
 import top.srcres258.ysyx.npc.util.Assertion
 
@@ -27,9 +28,9 @@ class ControlAndStatusRegisterFile(
         val readPort3 = new ControlAndStatusRegisterFile.ReadPort(xLen, regAddrWidth)
         val writePort1 = new ControlAndStatusRegisterFile.WritePort(xLen, regAddrWidth)
         val writePort2 = new ControlAndStatusRegisterFile.WritePort(xLen, regAddrWidth)
-        
-        val dpi = new ControlAndStatusRegisterFileDPIBundle(xLen)
     })
+
+    val dpi = if (Config.enableDPI) Some(IO(new ControlAndStatusRegisterFileDPIBundle(xLen))) else None
 
     val registers = RegInit(ControlAndStatusRegisterFile.RegisterBundle(xLen))
     val roRegisters = ControlAndStatusRegisterFile.ReadOnlyRegisterBundle(xLen)
@@ -71,13 +72,15 @@ class ControlAndStatusRegisterFile(
         }
     })
 
-    io.dpi.csr_mstatus := registers.mstatus
-    io.dpi.csr_mtvec := registers.mtvec
-    io.dpi.csr_mepc := registers.mepc
-    io.dpi.csr_mcause := registers.mcause
-    io.dpi.csr_mtval := registers.mtval
-    io.dpi.csr_mvendorid := roRegisters.mvendorid
-    io.dpi.csr_marchid := roRegisters.marchid
+    dpi.foreach { dpiBundle =>
+        dpiBundle.csr_mstatus := registers.mstatus
+        dpiBundle.csr_mtvec := registers.mtvec
+        dpiBundle.csr_mepc := registers.mepc
+        dpiBundle.csr_mcause := registers.mcause
+        dpiBundle.csr_mtval := registers.mtval
+        dpiBundle.csr_mvendorid := roRegisters.mvendorid
+        dpiBundle.csr_marchid := roRegisters.marchid
+    }
 }
 
 object ControlAndStatusRegisterFile {

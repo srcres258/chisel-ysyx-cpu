@@ -15,13 +15,3 @@ class GeneralDPIAdapter(xLen: Int) extends DPIAdapter {
 
     setInline(s"${desiredName}.sv", DPIInline.generalDPIEnabled(desiredName, io))
 }
-
-class GeneralDPISignalWrapper(xLen: Int) extends DPIAdapter {
-    Assertion.assertProcessorXLen(xLen)
-
-    override def desiredName: String = "GeneralDPIAdapter"
-
-    val io = IO(Flipped(new GeneralDPIBundle(xLen)))
-
-    setInline(s"${desiredName}.sv", DPIInline.generalDPISignalWrapper(desiredName, io))
-}

@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 
 import top.srcres258.ysyx.npc.LoadAndStoreUnit
+import top.srcres258.ysyx.npc.Config
 import top.srcres258.ysyx.npc.dpi.impl.IFUnitDPIBundle
 import top.srcres258.ysyx.npc.util.Assertion
 
@@ -21,10 +22,10 @@ class IFUnit(val xLen: Int) extends Module {
 
         val nextStage = Decoupled(Output(new IF_ID_Bundle(xLen)))
 
-        val dpi = new IFUnitDPIBundle(xLen)
-
         val working = Output(Bool())
     });
+
+    val dpi = if (Config.enableDPI) Some(IO(new IFUnitDPIBundle(xLen))) else None
 
     val pc = Wire(UInt(xLen.W))
     val instData = RegInit(0.U(xLen.W))
@@ -69,8 +70,10 @@ class IFUnit(val xLen: Int) extends Module {
     nextStageData.pcNext := pc + 4.U(xLen.W)
     nextStageData.inst := instData
 
-    io.dpi.if_nextStage_valid := io.nextStage.valid
-    io.dpi.instData := instData
+    dpi.foreach { dpiBundle =>
+        dpiBundle.if_nextStage_valid := io.nextStage.valid
+        dpiBundle.instData := instData
+    }
 
     io.working := state =/= s_idle
 }

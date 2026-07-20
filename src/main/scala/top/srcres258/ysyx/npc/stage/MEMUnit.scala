@@ -21,10 +21,10 @@ class MEMUnit(val xLen: Int) extends Module {
         val prevStage = Flipped(Decoupled(Output(new EX_MEM_Bundle(xLen))))
         val nextStage = Decoupled(Output(new MEM_WB_Bundle(xLen)))
 
-        val dpi = new MEMUnitDPIBundle(xLen)
-
         val working = Output(Bool())
     })
+
+    val dpi = if (Config.enableDPI) Some(IO(new MEMUnitDPIBundle(xLen))) else None
 
     val skip = RegInit(false.B)
     val rdata = RegInit(0.U(xLen.W))
@@ -140,30 +140,32 @@ class MEMUnit(val xLen: Int) extends Module {
     nextStageData.inst_jal := prevStageDataLatched.inst_jal
     nextStageData.inst_jalr := prevStageDataLatched.inst_jalr
 
-    when(state === s_wait_nextStage_ready) {
-        io.dpi.memWriteEnable := prevStageDataLatched.memWriteEnable
-        io.dpi.memReadEnable := prevStageDataLatched.memReadEnable
-        io.dpi.memAddr := prevStageDataLatched.aluOutput
-        io.dpi.memData := Mux(prevStageDataLatched.memWriteEnable, prevStageDataLatched.storeData, readDataAligned)
-        io.dpi.memStrobe := MuxLookup(prevStageDataLatched.lsType, 0.U((xLen / 8).W))(Seq(
-            LoadAndStoreUnit.LS_S_B.U -> "b0001".U((xLen / 8).W),
-            LoadAndStoreUnit.LS_S_H.U -> "b0011".U((xLen / 8).W),
-            LoadAndStoreUnit.LS_S_W.U -> "b1111".U((xLen / 8).W)
-        ))
-        io.dpi.memResp := rresp
-        io.dpi.memLsType := prevStageDataLatched.lsType
-        io.dpi.memPc := memPc
-    }.otherwise {
-        io.dpi.memWriteEnable := false.B
-        io.dpi.memReadEnable := false.B
-        io.dpi.memAddr := 0.U
-        io.dpi.memData := 0.U
-        io.dpi.memStrobe := 0.U
-        io.dpi.memResp := 0.U
-        io.dpi.memLsType := LoadAndStoreUnit.LS_UNKNOWN.U
-        io.dpi.memPc := memPc
+    dpi.foreach { dpiBundle =>
+        when(state === s_wait_nextStage_ready) {
+            dpiBundle.memWriteEnable := prevStageDataLatched.memWriteEnable
+            dpiBundle.memReadEnable := prevStageDataLatched.memReadEnable
+            dpiBundle.memAddr := prevStageDataLatched.aluOutput
+            dpiBundle.memData := Mux(prevStageDataLatched.memWriteEnable, prevStageDataLatched.storeData, readDataAligned)
+            dpiBundle.memStrobe := MuxLookup(prevStageDataLatched.lsType, 0.U((xLen / 8).W))(Seq(
+                LoadAndStoreUnit.LS_S_B.U -> "b0001".U((xLen / 8).W),
+                LoadAndStoreUnit.LS_S_H.U -> "b0011".U((xLen / 8).W),
+                LoadAndStoreUnit.LS_S_W.U -> "b1111".U((xLen / 8).W)
+            ))
+            dpiBundle.memResp := rresp
+            dpiBundle.memLsType := prevStageDataLatched.lsType
+            dpiBundle.memPc := memPc
+        }.otherwise {
+            dpiBundle.memWriteEnable := false.B
+            dpiBundle.memReadEnable := false.B
+            dpiBundle.memAddr := 0.U
+            dpiBundle.memData := 0.U
+            dpiBundle.memStrobe := 0.U
+            dpiBundle.memResp := 0.U
+            dpiBundle.memLsType := LoadAndStoreUnit.LS_UNKNOWN.U
+            dpiBundle.memPc := memPc
+        }
     }
-    io.dpi.mem_nextStage_valid := io.nextStage.valid
+    dpi.foreach { dpiBundle => dpiBundle.mem_nextStage_valid := io.nextStage.valid }
 
     io.working := state =/= s_idle
 }

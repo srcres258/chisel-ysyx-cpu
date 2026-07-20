@@ -6,6 +6,7 @@ import chisel3.util._
 import top.srcres258.ysyx.npc.ArithmeticLogicUnit
 import top.srcres258.ysyx.npc.ComparatorUnit
 import top.srcres258.ysyx.npc.PCTargetController
+import top.srcres258.ysyx.npc.Config
 import top.srcres258.ysyx.npc.dpi.impl.EXUnitDPIBundle
 import top.srcres258.ysyx.npc.util.Assertion
 
@@ -19,10 +20,10 @@ class EXUnit(val xLen: Int) extends Module {
         val prevStage = Flipped(Decoupled(Output(new ID_EX_Bundle(xLen))))
         val nextStage = Decoupled(Output(new EX_MEM_Bundle(xLen)))
 
-        val dpi = new EXUnitDPIBundle(xLen)
-
         val working = Output(Bool())
     })
+
+    val dpi = if (Config.enableDPI) Some(IO(new EXUnitDPIBundle(xLen))) else None
 
     val prevStageData = Wire(new ID_EX_Bundle(xLen))
     val nextStageData = Wire(new EX_MEM_Bundle(xLen))
@@ -127,16 +128,18 @@ class EXUnit(val xLen: Int) extends Module {
     nextStageData.inst_jal := prevStageData.inst_jal
     nextStageData.inst_jalr := prevStageData.inst_jalr
 
-    when(state === s_wait_nextStage_ready) {
-        io.dpi.ecallEnable := prevStageData.ecallEnable
-        io.dpi.epcRecoverEnable := prevStageData.epcRecoverEnable
-        io.dpi.exPc := prevStageData.pcCur
-    }.otherwise {
-        io.dpi.ecallEnable := false.B
-        io.dpi.epcRecoverEnable := false.B
-        io.dpi.exPc := 0.U
+    dpi.foreach { dpiBundle =>
+        when(state === s_wait_nextStage_ready) {
+            dpiBundle.ecallEnable := prevStageData.ecallEnable
+            dpiBundle.epcRecoverEnable := prevStageData.epcRecoverEnable
+            dpiBundle.exPc := prevStageData.pcCur
+        }.otherwise {
+            dpiBundle.ecallEnable := false.B
+            dpiBundle.epcRecoverEnable := false.B
+            dpiBundle.exPc := 0.U
+        }
+        dpiBundle.ex_nextStage_valid := io.nextStage.valid
     }
-    io.dpi.ex_nextStage_valid := io.nextStage.valid
 
     io.working := state =/= s_idle
 }

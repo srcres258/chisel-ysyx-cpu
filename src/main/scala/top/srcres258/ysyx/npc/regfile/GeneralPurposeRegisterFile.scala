@@ -3,6 +3,7 @@ package top.srcres258.ysyx.npc.regfile
 import chisel3._
 import chisel3.util._
 
+import top.srcres258.ysyx.npc.Config
 import top.srcres258.ysyx.npc.dpi.impl.GeneralPurposeRegisterFileDPIBundle
 import top.srcres258.ysyx.npc.util.Assertion
 
@@ -24,9 +25,9 @@ class GeneralPurposeRegisterFile(
     val io = IO(new Bundle {
         val readPort = new GeneralPurposeRegisterFile.ReadPort(xLen, regAddrWidth)
         val writePort = new GeneralPurposeRegisterFile.WritePort(xLen, regAddrWidth)
-
-        val dpi = new GeneralPurposeRegisterFileDPIBundle(xLen)
     })
+
+    val dpi = if (Config.enableDPI) Some(IO(new GeneralPurposeRegisterFileDPIBundle(xLen))) else None
 
     val registers = RegInit(VecInit(Seq.fill(1 << regAddrWidth)(0.U(xLen.W))))
     registers(0.U) := 0.U // RISC-V 规范规定：x0 寄存器恒为 0.
@@ -38,8 +39,10 @@ class GeneralPurposeRegisterFile(
         registers(io.writePort.writeAddress) := io.writePort.writeData
     }
 
-    for (i <- 0 until io.dpi.gprs.length) {
-        io.dpi.gprs(i) := registers(i)
+    dpi.foreach { dpiBundle =>
+        for (i <- 0 until dpiBundle.gprs.length) {
+            dpiBundle.gprs(i) := registers(i)
+        }
     }
 }
 

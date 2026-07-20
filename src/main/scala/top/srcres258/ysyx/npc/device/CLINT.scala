@@ -11,9 +11,14 @@ import top.srcres258.ysyx.npc.Config
 
 /**
   * ACLINT MTIMER 兼容的 CLINT 模块.
-  * 
+  *
   * 该模块实现 ACLINT v1.0-rc4 标准中 MTIMER 设备的 MTIME 寄存器,
   * 通过 DPI-C 接口从仿真环境获取真实时钟计数.
+  *
+  * 注意: 当 `Config.enableDPI = false` 时, 该模块不再连接任何 DPI 线网,
+  * MTIME 读回值会被硬连线为 0. 这对综合与 STA 没有影响, 但意味着
+  * `rdtime` / timer 语义失去真实时间源; 若要上 FPGA 或做真实运行,
+  * 需要额外补一个硬件计数器时间源.
   *
   * 当前实现:
   *   - MTIME (0x0200bff8 ~ 0x0200bfff): 64-bit 单调递增时间计数器 (RW)
@@ -27,11 +32,13 @@ class CLINT(val xLen: Int) extends Module {
 
     Assertion.assertProcessorXLen(xLen)
 
+    private val hasDPI = Config.enableDPI
+
     val io = IO(new Bundle {
         val bus = Flipped(new AXI4Lite(xLen))
-
-        val dpi = new CLINTDPIBundle(xLen)
     })
+
+    val dpi = if (hasDPI) Some(IO(new CLINTDPIBundle(xLen))) else None
 
     val readRoutineTimer = RegInit(0.U(CLINT.READ_ROUTINE_TIMER_WIDTH.W))
     val readRoutineTimerMax = RegInit(CLINT.READ_ROUTINE_CLOCK_CYCLES.U(CLINT.READ_ROUTINE_TIMER_WIDTH.W))
@@ -49,6 +56,10 @@ class CLINT(val xLen: Int) extends Module {
 
     val bus = Wire(Flipped(new AXI4Lite(xLen)))
     bus <> io.bus
+
+    // DPI disabled: MTIME 没有真实时间源, 直接返回 0.
+    // 这不会影响综合/STA, 但依赖 rdtime/timer 的软件需要额外硬件时间源.
+    val mtimeReadData = if (hasDPI) dpi.get.read.readData else 0.U(xLen.W)
 
     // 判断地址是否命中 ACLINT MTIME 寄存器范围 (8 字节)
     val araddrIn = Wire(UInt(xLen.W))
@@ -96,8 +107,10 @@ class CLINT(val xLen: Int) extends Module {
     bus.b.valid := state === s_write_wait_bready
 
     readRoutineDone := readRoutineTimer >= readRoutineTimerMax
-    io.dpi.read.readEnable := false.B
-    io.dpi.read.readAddress := 0.U
+    dpi.foreach { dpiBundle =>
+        dpiBundle.read.readEnable := false.B
+        dpiBundle.read.readAddress := 0.U
+    }
     when(state === s_idle && bus.ar.fire) {
         araddr := bus.ar.bits.addr
     }.elsewhen(state === s_read_doAction) {
@@ -109,11 +122,13 @@ class CLINT(val xLen: Int) extends Module {
                 readRoutineTimerMax := CLINT.READ_ROUTINE_CLOCK_CYCLES.U
             }
             // 读数据: MTIME 地址走 DPI-C, 其他 CLINT 内地址返回 0
-            rdata := Mux(hitMTIME_r, io.dpi.read.readData, 0.U)
+            rdata := Mux(hitMTIME_r, mtimeReadData, 0.U)
             rresp := 0.U
         }.otherwise {
-            io.dpi.read.readEnable := true.B
-            io.dpi.read.readAddress := araddr
+            dpi.foreach { dpiBundle =>
+                dpiBundle.read.readEnable := true.B
+                dpiBundle.read.readAddress := araddr
+            }
             readRoutineTimer := readRoutineTimer + 1.U
         }
     }
@@ -121,10 +136,12 @@ class CLINT(val xLen: Int) extends Module {
     bus.r.bits.resp := rresp
 
     writeRoutineDone := writeRoutineTimer >= writeRoutineTimerMax
-    io.dpi.write.writeEnable := false.B
-    io.dpi.write.writeAddress := 0.U
-    io.dpi.write.writeData := 0.U
-    io.dpi.write.writeDataStrobe := 0.U
+    dpi.foreach { dpiBundle =>
+        dpiBundle.write.writeEnable := false.B
+        dpiBundle.write.writeAddress := 0.U
+        dpiBundle.write.writeData := 0.U
+        dpiBundle.write.writeDataStrobe := 0.U
+    }
     when(state === s_idle && bus.aw.fire) {
         awaddr := bus.aw.bits.addr
     }.elsewhen(state === s_write_wait_wvalid && bus.w.fire) {
@@ -141,11 +158,13 @@ class CLINT(val xLen: Int) extends Module {
             bresp := 0.U
         }.otherwise {
             // MTIME 写操作: 通过 DPI-C 写入; 非 MTIME 地址: 忽略 (no-op)
-            when(hitMTIME_w) {
-                io.dpi.write.writeEnable := true.B
-                io.dpi.write.writeAddress := awaddr
-                io.dpi.write.writeData := wdata
-                io.dpi.write.writeDataStrobe := wstrb
+            dpi.foreach { dpiBundle =>
+                when(hitMTIME_w) {
+                    dpiBundle.write.writeEnable := true.B
+                    dpiBundle.write.writeAddress := awaddr
+                    dpiBundle.write.writeData := wdata
+                    dpiBundle.write.writeDataStrobe := wstrb
+                }
             }
             writeRoutineTimer := writeRoutineTimer + 1.U
         }
