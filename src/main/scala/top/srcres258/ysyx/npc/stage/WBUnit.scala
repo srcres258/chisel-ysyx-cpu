@@ -27,6 +27,9 @@ class WBUnit(val xLen: Int) extends Module {
         val done = Output(Bool())
 
         val working = Output(Bool())
+
+        /** GPR write was suppressed because rd == x0 (architecturally discarded). */
+        val gprWriteSuppressedX0 = Output(Bool())
     })
 
     val dpi = if (Config.enableDPI) Some(IO(new WBUnitDPIBundle(xLen))) else None
@@ -151,4 +154,7 @@ class WBUnit(val xLen: Int) extends Module {
     }
 
     io.working := state =/= s_idle
+
+    io.gprWriteSuppressedX0 := prevStageData.regWriteEnable &&
+                                prevStageData.rd === 0.U
 }

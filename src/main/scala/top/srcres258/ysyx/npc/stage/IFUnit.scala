@@ -23,6 +23,10 @@ class IFUnit(val xLen: Int) extends Module {
         val nextStage = Decoupled(Output(new IF_ID_Bundle(xLen)))
 
         val working = Output(Bool())
+
+        /** FSM state encoding for perf phase decomposition.
+          *  0=s_idle  1=s_waitData  2=s_sendFetchReq  3=s_waitResp  4=s_wait_nextStage_ready */
+        val ifetchState = Output(UInt(3.W))
     });
 
     val dpi = if (Config.enableDPI) Some(IO(new IFUnitDPIBundle(xLen))) else None
@@ -76,6 +80,7 @@ class IFUnit(val xLen: Int) extends Module {
     }
 
     io.working := state =/= s_idle
+    io.ifetchState := state
 }
 
 object IFUnit {

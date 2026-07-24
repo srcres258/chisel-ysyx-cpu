@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 
 import top.srcres258.ysyx.npc.Config
+import top.srcres258.ysyx.npc.LoadAndStoreUnit
 import top.srcres258.ysyx.npc.util.Assertion
 import top.srcres258.ysyx.npc.util.MemoryRange
 import top.srcres258.ysyx.npc.util.SoCMemoryRanges
@@ -36,6 +37,22 @@ class PerfSignalCollector(val xLen: Int) extends Module {
 
     // ---- RV32I opcode 常量 (局部定义, 不引入额外模块依赖) ----
     private val OP_R_TYPE             = "b0110011".U(7.W)
+
+    // ---- RD_MUX 选择常量 (局部定义, 与 ControlUnit 保持一致) ----
+    private val RD_MUX_DMEM    = 0.U(3.W)
+    private val RD_MUX_ALU     = 1.U(3.W)
+    private val RD_MUX_BCU     = 2.U(3.W)
+    private val RD_MUX_IMM     = 3.U(3.W)
+    private val RD_MUX_PC_N    = 4.U(3.W)
+    private val RD_MUX_CSR_DATA = 5.U(3.W)
+
+    // ---- CSR_RD_MUX 选择常量 (局部定义, 与 ControlUnit 保持一致) ----
+    private val CSR_RD_MUX_C      = 0.U(3.W)
+    private val CSR_RD_MUX_S      = 1.U(3.W)
+    private val CSR_RD_MUX_W      = 2.U(3.W)
+    private val CSR_RD_MUX_C_IMM  = 3.U(3.W)
+    private val CSR_RD_MUX_S_IMM  = 4.U(3.W)
+    private val CSR_RD_MUX_W_IMM  = 5.U(3.W)
     private val OP_B_TYPE             = "b1100011".U(7.W)
     private val OP_S_TYPE             = "b0100011".U(7.W)
     private val OP_I_JALR_TYPE        = "b1100111".U(7.W)
@@ -89,6 +106,80 @@ class PerfSignalCollector(val xLen: Int) extends Module {
         // ---- 异常信号 ----
         /** WB 写回 CSR 端口 2 的 writeEnable (仅 ecall 时置位) */
         val wb_csr_write2_enable = Input(Bool())
+
+        // ---- 阶段生命周期信号 (entry/exit fire) ----
+        val if_entry_fire  = Input(Bool())
+        val id_entry_fire  = Input(Bool())
+        val ex_entry_fire  = Input(Bool())
+        val mem_entry_fire = Input(Bool())
+        val wb_entry_fire  = Input(Bool())
+        val if_exit_fire   = Input(Bool())
+        val id_exit_fire   = Input(Bool())
+        val ex_exit_fire   = Input(Bool())
+        val mem_exit_fire  = Input(Bool())
+        val wb_exit_fire   = Input(Bool())
+
+        // ---- 寄存器上下文信号 (GPR/CSR write events + field-use) ----
+        /** WB done 时的 GPR 写使能 (wbu.io.gprWritePort.writeEnable) */
+        val wb_gpr_write_enable  = Input(Bool())
+        /** WB done 时的 CSR 写端口 1 使能 (wbu.io.csrWritePort1.writeEnable) */
+        val wb_csr_write1_enable = Input(Bool())
+        /** 写回数据选择 (3-bit, 来自 MEM_WB bundle 的 regWriteDataSel) */
+        val wb_reg_write_data_sel = Input(UInt(3.W))
+        /** CSR 写回数据选择 (3-bit, 来自 MEM_WB bundle 的 csrRegWriteDataSel) */
+        val wb_csr_write_data_sel = Input(UInt(3.W))
+
+        // ---- GPR/CSR 利用率信号 (来自 IDU/WBU) ----
+        /** IDU GPR 读端口 rs1 字段 (5-bit) */
+        val idu_rs1 = Input(UInt(5.W))
+        /** IDU GPR 读端口 rs2 字段 (5-bit) */
+        val idu_rs2 = Input(UInt(5.W))
+        /** IDU: 指令语义上不使用 rs2 (来自 idu.io.rs2Unused) */
+        val idu_rs2_unused = Input(Bool())
+        /** IDU: 指令 opcode == SYSTEM (0x73) (来自 idu.io.isSystemInst) */
+        val idu_is_system_inst = Input(Bool())
+        /** IDU CSR 读端口 1 地址 (12-bit, 来自 idu.csrReadPort1.readAddress) */
+        val idu_csr_read_addr = Input(UInt(12.W))
+        /** WBU: GPR 写因 rd==x0 被抑制 (来自 wbu.io.gprWriteSuppressedX0) */
+        val wbu_gpr_write_suppressed_x0 = Input(Bool())
+        /** WBU CSR 写端口 1 地址 (12-bit, 来自 wbu.csrWritePort1.writeAddress) */
+        val wbu_csr_write_addr = Input(UInt(12.W))
+
+        // ---- IFetch 相位/事务信号 (来自 IFUnit) ----
+        /** IFU FSM state encoding (3-bit: s_idle=0 .. s_wait_nextStage_ready=4) */
+        val ifu_ifetch_state = Input(UInt(3.W))
+        /** IFU nextStage.ready (下游 ID 是否可接收数据) */
+        val ifu_nextStage_ready = Input(Bool())
+
+        // ---- LSU 观测信号 (来自 LoadAndStoreUnit) ----
+        /** LSU FSM state encoding (4-bit, 12 states) */
+        val lsu_state = Input(UInt(4.W))
+        /** LSU pendingIsFetch (当前事务是否为取指) */
+        val lsu_pending_fetch = Input(Bool())
+        /** LSU pendingIsWrite (当前事务是否为写) */
+        val lsu_pending_write = Input(Bool())
+        /** LSU needsByteSplit (当前字访问是否非对齐) */
+        val lsu_needs_byte_split = Input(Bool())
+        /** LSU pendingLsType (当前事务的 load/store 类型) */
+        val lsu_pending_ls_type = Input(UInt(LoadAndStoreUnit.LS_TYPE_LEN.W))
+        /** LSU AXI AR 信道 .fire (valid && ready) */
+        val lsu_axi_ar_fire = Input(Bool())
+        /** LSU AXI AW 信道 .fire */
+        val lsu_axi_aw_fire = Input(Bool())
+        /** LSU AXI W 信道 .fire */
+        val lsu_axi_w_fire = Input(Bool())
+        /** LSU AXI R 信道 .fire */
+        val lsu_axi_r_fire = Input(Bool())
+        /** LSU AXI B 信道 .fire */
+        val lsu_axi_b_fire = Input(Bool())
+        /** LSU io.memBus.aw.ready (从设备 AW 信道就绪) */
+        val lsu_aw_ready = Input(Bool())
+        /** LSU io.memBus.w.ready (从设备 W 信道就绪) */
+        val lsu_w_ready = Input(Bool())
+
+        // ---- EX 阶段并发信号 (来自 MEM_WB bundle) ----
+        /** WB 退休指令的比较器分支使能 (compBranchEnable, 来自 wbu.io.prevStage.bits) */
+        val wb_comp_branch_enable = Input(Bool())
 
         // ---- 输出 ----
         val perf = new PerfDPIBundle(xLen)
@@ -253,4 +344,333 @@ class PerfSignalCollector(val xLen: Int) extends Module {
       * (仅 ecall 路径会置位 wbu.io.csrWritePort2.writeEnable).
       */
     io.perf.trap.exception_fire := io.wb_done && io.wb_csr_write2_enable
+
+    // ================================================================
+    // 7. 阶段生命周期 (PerfPhaseDPIBundle) — Decoupled 握手完成信号
+    // ================================================================
+    io.perf.phase.if_entry_fire  := io.if_entry_fire
+    io.perf.phase.id_entry_fire  := io.id_entry_fire
+    io.perf.phase.ex_entry_fire  := io.ex_entry_fire
+    io.perf.phase.mem_entry_fire := io.mem_entry_fire
+    io.perf.phase.wb_entry_fire  := io.wb_entry_fire
+    io.perf.phase.if_exit_fire   := io.if_exit_fire
+    io.perf.phase.id_exit_fire   := io.id_exit_fire
+    io.perf.phase.ex_exit_fire   := io.ex_exit_fire
+    io.perf.phase.mem_exit_fire  := io.mem_exit_fire
+    io.perf.phase.wb_exit_fire   := io.wb_exit_fire
+
+    // ================================================================
+    // 8. 寄存器上下文 (PerfRegDPIBundle) — GPR/CSR write events + field-use
+    // ================================================================
+
+    // --- Register write events ---
+    // GPR 写事件: WB 退休且 regWriteEnable 置位
+    io.perf.reg.gpr_wb_fire := io.wb_done && io.wb_gpr_write_enable
+    // CSR 写事件: WB 退休且任意 CSR 写端口使能
+    io.perf.reg.csr_wb_fire := io.wb_done &&
+                                (io.wb_csr_write1_enable || io.wb_csr_write2_enable)
+
+    // --- GPR 写回数据源分解 (regWriteDataSel) ---
+    io.perf.reg.gpr_src_alu     := io.wb_done && io.wb_gpr_write_enable &&
+                                    io.wb_reg_write_data_sel === RD_MUX_ALU
+    io.perf.reg.gpr_src_dmem    := io.wb_done && io.wb_gpr_write_enable &&
+                                    io.wb_reg_write_data_sel === RD_MUX_DMEM
+    io.perf.reg.gpr_src_imm     := io.wb_done && io.wb_gpr_write_enable &&
+                                    io.wb_reg_write_data_sel === RD_MUX_IMM
+    io.perf.reg.gpr_src_pc_next := io.wb_done && io.wb_gpr_write_enable &&
+                                    io.wb_reg_write_data_sel === RD_MUX_PC_N
+    io.perf.reg.gpr_src_bcu     := io.wb_done && io.wb_gpr_write_enable &&
+                                    io.wb_reg_write_data_sel === RD_MUX_BCU
+    io.perf.reg.gpr_src_csr     := io.wb_done && io.wb_gpr_write_enable &&
+                                    io.wb_reg_write_data_sel === RD_MUX_CSR_DATA
+
+    // --- CSR 写回模式分解 (csrRegWriteDataSel) ---
+    // CSR 写事件: csrRegWriteEnable 或 ecall 触发的 CSR 写
+    val csrWriteActive = io.wb_done && (io.wb_csr_write1_enable || io.wb_csr_write2_enable)
+
+    io.perf.reg.csr_mode_rw  := csrWriteActive &&
+                                 io.wb_csr_write_data_sel === CSR_RD_MUX_W
+    io.perf.reg.csr_mode_rs  := csrWriteActive &&
+                                 io.wb_csr_write_data_sel === CSR_RD_MUX_S
+    io.perf.reg.csr_mode_rc  := csrWriteActive &&
+                                 io.wb_csr_write_data_sel === CSR_RD_MUX_C
+    io.perf.reg.csr_mode_imm := csrWriteActive && (
+                                 io.wb_csr_write_data_sel === CSR_RD_MUX_W_IMM ||
+                                 io.wb_csr_write_data_sel === CSR_RD_MUX_S_IMM ||
+                                 io.wb_csr_write_data_sel === CSR_RD_MUX_C_IMM)
+
+    // ================================================================
+    // 9. GPR 利用率 (PerfGprDPIBundle) — IDU 读端口活动 + WBU 写抑制
+    // ================================================================
+
+    val iduExitFire = io.id_exit_fire
+
+    // GPR 读端口活动: 5-stage 标量流水线每个指令都驱动两个读端口,
+    // 因此 rs1/rs2/both 都等价于 iduExitFire.
+    io.perf.gpr.gpr_read_rs1        := iduExitFire
+    io.perf.gpr.gpr_read_rs2        := iduExitFire
+    io.perf.gpr.gpr_read_both       := iduExitFire
+    io.perf.gpr.gpr_read_rs1_x0     := iduExitFire && io.idu_rs1 === 0.U
+    io.perf.gpr.gpr_read_rs2_x0     := iduExitFire && io.idu_rs2 === 0.U
+    io.perf.gpr.gpr_read_rs1_eq_rs2 := iduExitFire &&
+                                        io.idu_rs1 === io.idu_rs2 &&
+                                        io.idu_rs1 =/= 0.U
+    io.perf.gpr.gpr_read_rs2_unused := iduExitFire && io.idu_rs2_unused
+    // upper16: rs1 或 rs2 地址 bit4 为 1 (寄存器 x16–x31)
+    io.perf.gpr.gpr_read_upper16    := iduExitFire &&
+                                        (io.idu_rs1(4) || io.idu_rs2(4))
+    // GPR 写抑制: regWriteEnable 但 rd==x0
+    io.perf.gpr.gpr_write_suppressed_x0 := io.wb_done &&
+                                            io.wbu_gpr_write_suppressed_x0
+
+    // ================================================================
+    // 10. CSR 利用率 (PerfCsrDPIBundle) — 读端口并发 + 写分类 + 地址分布
+    // ================================================================
+
+    // CSR 读端口使能:
+    //   Port1: 指令驱动的 CSR 地址, 仅 SYSTEM 指令有意义
+    //   Port2: 固定读 mepc (0x341), 所有指令
+    //   Port3: 固定读 mtvec (0x305), 所有指令
+    // 并发: 端口 2 和 3 总是活跃, 因此 concurrent_2port 在所有 IDU 退出时均为真;
+    //       concurrent_3port 仅在端口 1 也活跃时 (SYSTEM 指令) 才为真.
+    val csrReadActive = iduExitFire
+    io.perf.csr.csr_read_port1_enable     := csrReadActive && io.idu_is_system_inst
+    io.perf.csr.csr_read_port2_enable     := csrReadActive
+    io.perf.csr.csr_read_port3_enable     := csrReadActive
+    io.perf.csr.csr_read_concurrent_2port := csrReadActive
+    io.perf.csr.csr_read_concurrent_3port := csrReadActive && io.idu_is_system_inst
+
+    // CSR 写分类:
+    //   normal: CSR 指令写 (csrRegWriteEnable, 无 ecall)
+    //   trap:   ecall 写 (mepc via port1, mcause via port2)
+    //   return: mret 写 — 当前设计中 mret 不写 CSR, 始终为 0
+    io.perf.csr.csr_write_normal := io.wb_done && io.wb_csr_write1_enable &&
+                                     !io.wb_csr_write2_enable
+    io.perf.csr.csr_write_trap   := io.wb_done && io.wb_csr_write2_enable
+    io.perf.csr.csr_write_return := false.B
+
+    // CSR 地址分布: 统计对每个真实 CSR 的访问 (写为主, 读辅助)
+    // 写端口 1 负责正常 CSR 写 + ecall 的 mepc 写;
+    // 写端口 2 仅在 ecall 时写 mcause (0x342).
+    val wbCsrWrFire = io.wb_done &&
+                       (io.wb_csr_write1_enable || io.wb_csr_write2_enable)
+    val csrAddrHit = (target: Int) => io.wbu_csr_write_addr === target.U(12.W)
+
+    io.perf.csr.csr_addr_mstatus   := wbCsrWrFire && csrAddrHit(0x300)
+    io.perf.csr.csr_addr_mtvec     := wbCsrWrFire && csrAddrHit(0x305)
+    io.perf.csr.csr_addr_mepc      := wbCsrWrFire && csrAddrHit(0x341)
+    io.perf.csr.csr_addr_mcause    := (wbCsrWrFire && csrAddrHit(0x342)) ||
+                                       (io.wb_done && io.wb_csr_write2_enable)
+    io.perf.csr.csr_addr_mtval     := wbCsrWrFire && csrAddrHit(0x343)
+    // mvendorid / marchid 为只读 CSR, 不会有写事件
+    io.perf.csr.csr_addr_mvendorid := false.B
+    io.perf.csr.csr_addr_marchid   := false.B
+
+    // ================================================================
+    // 11. IFetch 事务与相位分解 (PerfIfetchDPIBundle)
+    // ================================================================
+
+    // ---- IFetch 事务事件 ----
+    val ifetchReqFire  = io.if_ifetch_req_valid && io.if_ifetch_req_ready
+    val ifetchRespFire = io.if_ifetch_resp_valid && io.if_ifetch_resp_ready
+    // AXI AR/R channel fires attributed to IFetch (pendingIsFetch asserted in LSU)
+    val ifetchAxiArFire = io.lsu_axi_ar_fire && io.lsu_pending_fetch
+    val ifetchAxiRFire  = io.lsu_axi_r_fire  && io.lsu_pending_fetch
+
+    io.perf.ifetch.request_fire   := io.if_entry_fire          // executionInfo.fire
+    io.perf.ifetch.lsu_req_fire   := ifetchReqFire
+    io.perf.ifetch.axi_ar_fire    := ifetchAxiArFire
+    io.perf.ifetch.axi_r_fire     := ifetchAxiRFire
+    io.perf.ifetch.response_fire  := ifetchRespFire
+
+    // consumer_ready_at_response: 响应到达时下游 ID 已 ready
+    io.perf.ifetch.consumer_ready_at_response := ifetchRespFire && io.ifu_nextStage_ready
+
+    // response_consumed_first_cycle: 响应到达后首个周期即被下游消费
+    // IFU FSM: resp.fire → s_wait_nextStage_ready → 下一周期 nextStage.valid=1
+    // 如果下一周期 nextStage.fire, 则说明首个周期即被消费
+    val ifetchRespArrivedLastCycle = RegNext(ifetchRespFire, false.B)
+    val ifetchFirstCycleConsumed = ifetchRespArrivedLastCycle &&
+                                    io.ifu_nextStage_ready &&
+                                    (io.ifu_ifetch_state === 4.U)  // s_wait_nextStage_ready=4
+    io.perf.ifetch.response_consumed_first_cycle := ifetchFirstCycleConsumed
+
+    // ---- IFetch 相位周期 (互斥, 覆盖 IFU 所有状态) ----
+    // IFU FSM encoding: s_idle=0  s_waitData=1  s_sendFetchReq=2  s_waitResp=3  s_wait_nextStage_ready=4
+    val ifSt = io.ifu_ifetch_state
+    io.perf.ifetch.phase_accept_pc        := ifSt === 0.U  // s_idle
+    io.perf.ifetch.phase_prepare_request  := ifSt === 1.U  // s_waitData
+    io.perf.ifetch.phase_request_blocked  := ifSt === 2.U  // s_sendFetchReq
+    io.perf.ifetch.phase_wait_response    := ifSt === 3.U  // s_waitResp
+    // s_wait_nextStage_ready=4: split by downstream readiness
+    io.perf.ifetch.phase_response_buffered := ifSt === 4.U && io.ifu_nextStage_ready
+    io.perf.ifetch.phase_output_blocked    := ifSt === 4.U && !io.ifu_nextStage_ready
+
+    // ================================================================
+    // 12. LSU 事务与相位分解 (PerfLsuDPIBundle)
+    // ================================================================
+
+    // ---- LSU Load/Store 分解 (在 MEM→LSU 请求 fire 时观测) ----
+    val memReqFire = io.mem_lsu_req_valid && io.mem_lsu_req_ready
+    val memReqIsLoad  = memReqFire && !io.mem_lsu_req_isWrite
+    val memReqIsStore = memReqFire && io.mem_lsu_req_isWrite
+
+    // 从 LSU 内部观测 needsByteSplit 和 pendingLsType
+    // 注意: 在 acceptMem 的同一周期, pendingLsType 还未更新,
+    // 因此需要用 LSU 的 perfPendingLsType 在 memReqFire 下一拍获取
+    val lsuAcceptMem = RegNext(memReqFire && !io.lsu_pending_fetch, false.B)
+    val lsuNeedsByteSplit_d = RegNext(io.lsu_needs_byte_split, false.B)
+    val lsuPendingLsType_d  = RegNext(io.lsu_pending_ls_type, 0.U)
+
+    // Load 类型分类 (1-cycle delayed to align with LSU pending registers)
+    import LoadAndStoreUnit.{LS_L_B, LS_L_BU, LS_L_H, LS_L_HU, LS_L_W, LS_S_B, LS_S_H, LS_S_W}
+    val isByteLoad  = lsuPendingLsType_d === LS_L_B.U(4.W)  || lsuPendingLsType_d === LS_L_BU.U(4.W)
+    val isHalfLoad  = lsuPendingLsType_d === LS_L_H.U(4.W)  || lsuPendingLsType_d === LS_L_HU.U(4.W)
+    val isWordLoad  = lsuPendingLsType_d === LS_L_W.U(4.W)
+    val isByteStore = lsuPendingLsType_d === LS_S_B.U(4.W)
+    val isHalfStore = lsuPendingLsType_d === LS_S_H.U(4.W)
+    val isWordStore = lsuPendingLsType_d === LS_S_W.U(4.W)
+    val isAligned   = !lsuNeedsByteSplit_d
+
+    io.perf.lsu.load_byte_fire      := lsuAcceptMem && isByteLoad
+    io.perf.lsu.load_half_fire      := lsuAcceptMem && isHalfLoad
+    io.perf.lsu.load_word_fire      := lsuAcceptMem && isWordLoad
+    io.perf.lsu.load_aligned_fire   := lsuAcceptMem && !io.lsu_pending_write && isAligned
+    io.perf.lsu.load_unaligned_fire := lsuAcceptMem && !io.lsu_pending_write && !isAligned
+    io.perf.lsu.store_byte_fire     := lsuAcceptMem && isByteStore
+    io.perf.lsu.store_half_fire     := lsuAcceptMem && isHalfStore
+    io.perf.lsu.store_word_fire     := lsuAcceptMem && isWordStore
+    io.perf.lsu.store_aligned_fire  := lsuAcceptMem && io.lsu_pending_write && isAligned
+    io.perf.lsu.store_unaligned_fire:= lsuAcceptMem && io.lsu_pending_write && !isAligned
+
+    // ---- LSU AXI 信道握手 (全部事务) ----
+    io.perf.lsu.axi_ar_fire := io.lsu_axi_ar_fire
+    io.perf.lsu.axi_aw_fire := io.lsu_axi_aw_fire
+    io.perf.lsu.axi_w_fire  := io.lsu_axi_w_fire
+    io.perf.lsu.axi_r_fire  := io.lsu_axi_r_fire
+    io.perf.lsu.axi_b_fire  := io.lsu_axi_b_fire
+
+    // ---- 非对齐额外事务: split 状态中首个事务之后的 AXI 信道握手 ----
+    // LSU FSM: s_split_read_ar=7  s_split_read_r=8  s_split_write_aw=9  s_split_write_w=10  s_split_write_b=11
+    val lsuStateIsSplit = io.lsu_state >= 7.U && io.lsu_state <= 11.U
+    val justExitedSplit = !lsuStateIsSplit && RegNext(lsuStateIsSplit, false.B)
+    // 跟踪 split 序列中的首个事务
+    val splitFirstSeen = RegInit(false.B)
+    when (justExitedSplit) {
+        splitFirstSeen := false.B
+    }.elsewhen (lsuStateIsSplit && !splitFirstSeen &&
+                 (io.lsu_axi_ar_fire || io.lsu_axi_aw_fire)) {
+        splitFirstSeen := true.B
+    }
+    // 首个事务之后的任何 split 状态 AXI 信道握手均为 "extra"
+    val splitChannelFire = lsuStateIsSplit &&
+                            (io.lsu_axi_ar_fire || io.lsu_axi_aw_fire || io.lsu_axi_w_fire)
+    io.perf.lsu.unaligned_extra_transaction := splitChannelFire && splitFirstSeen
+
+    // ---- Store AW/W 串行化观测 ----
+    // concurrent_ready_opportunity: AW 和 W 信道同时 ready, 但 LSU 串行化它们
+    // 这发生在 s_write_aw 或 s_split_write_aw 状态下, 当 w.ready 也为真时
+    val lsuInWriteAddrState = io.lsu_state === 3.U || io.lsu_state === 9.U  // s_write_aw=3  s_split_write_aw=9
+    io.perf.lsu.concurrent_ready_opportunity := lsuInWriteAddrState &&
+                                                io.lsu_aw_ready && io.lsu_w_ready
+    // aw_done_wait_w: AW 已完成但还在等待 W (s_write_w 或 s_split_write_w 状态)
+    val lsuInWriteDataState = io.lsu_state === 4.U || io.lsu_state === 10.U  // s_write_w=4  s_split_write_w=10
+    io.perf.lsu.aw_done_wait_w := lsuInWriteDataState
+    // w_done_wait_aw: W 已完成但在 split 序列中等待下一个 AW
+    // 发生在刚离开 s_split_write_w (w.fire 完成) 进入 s_split_write_aw 时,
+    // 以及刚离开 s_split_write_b (b.fire 完成) 进入 s_split_write_aw 时
+    val lsuEnteringSplitAwFromW = io.lsu_state === 9.U &&  // s_split_write_aw=9
+                                   RegNext(io.lsu_state === 10.U || io.lsu_state === 11.U, false.B)
+    io.perf.lsu.w_done_wait_aw := lsuEnteringSplitAwFromW
+
+    // ================================================================
+    // 13. EX 阶段并发计数 (PerfExDPIBundle) — ALU/PC 目标/地址生成
+    //    从退休指令的 opcode/funct3/funct7 推导, 而非选择器 toggles.
+    // ================================================================
+
+    // ALU 操作解码: 根据退休指令的 opcode/funct3/funct7 字段
+    val isRType = opcode === OP_R_TYPE
+    val isITypeAlu = opcode === OP_I_ALU_TYPE
+    val isLui = opcode === OP_U_LUI_TYPE
+    val isAuipc = opcode === OP_U_AUIPC_TYPE
+
+    val funct3_000 = funct3 === 0.U(3.W)
+    val funct3_001 = funct3 === 1.U(3.W)
+    val funct3_100 = funct3 === 4.U(3.W)
+    val funct3_101 = funct3 === 5.U(3.W)
+    val funct3_110 = funct3 === 6.U(3.W)
+    val funct3_111 = funct3 === 7.U(3.W)
+    val funct7_00  = funct7(5) === 0.U
+    val funct7_20  = funct7(5) === 1.U
+
+    // ALU op 分类: 指令是否使用了此 ALU 操作类型 (不要求 GPR 写回)
+    val decAdd = (isRType && funct3_000 && funct7_00) ||       // ADD
+                 (isITypeAlu && funct3_000) ||                  // ADDI
+                 isAuipc || isLoad || isStore || isBranch       // AUIPC, load, store, branch (all use ADD)
+    val decSub = isRType && funct3_000 && funct7_20              // SUB
+    val decSll = (isRType && funct3_001) ||                     // SLL
+                 (isITypeAlu && funct3_001)                      // SLLI
+    val decSrl = (isRType && funct3_101 && funct7_00) ||        // SRL
+                 (isITypeAlu && funct3_101 && funct7_00)         // SRLI
+    val decSra = (isRType && funct3_101 && funct7_20) ||        // SRA
+                 (isITypeAlu && funct3_101 && funct7_20)         // SRAI
+    val decAnd = (isRType && funct3_111) ||                     // AND
+                 (isITypeAlu && funct3_111)                      // ANDI
+    val decOr  = (isRType && funct3_110) ||                     // OR
+                 (isITypeAlu && funct3_110)                      // ORI
+    val decXor = (isRType && funct3_100) ||                     // XOR
+                 (isITypeAlu && funct3_100)                      // XORI
+
+    // RegNext into wb_done_d domain (same delay as inst classification)
+    val aluOpAdd_d = RegNext(decAdd, false.B)
+    val aluOpSub_d = RegNext(decSub, false.B)
+    val aluOpSll_d = RegNext(decSll, false.B)
+    val aluOpSrl_d = RegNext(decSrl, false.B)
+    val aluOpSra_d = RegNext(decSra, false.B)
+    val aluOpAnd_d = RegNext(decAnd, false.B)
+    val aluOpOr_d  = RegNext(decOr,  false.B)
+    val aluOpXor_d = RegNext(decXor, false.B)
+
+    io.perf.ex.alu_op_add := wb_done_d && aluOpAdd_d
+    io.perf.ex.alu_op_sub := wb_done_d && aluOpSub_d
+    io.perf.ex.alu_op_sll := wb_done_d && aluOpSll_d
+    io.perf.ex.alu_op_srl := wb_done_d && aluOpSrl_d
+    io.perf.ex.alu_op_sra := wb_done_d && aluOpSra_d
+    io.perf.ex.alu_op_and := wb_done_d && aluOpAnd_d
+    io.perf.ex.alu_op_or  := wb_done_d && aluOpOr_d
+    io.perf.ex.alu_op_xor := wb_done_d && aluOpXor_d
+
+    // ---- 加法器需求意图 (adder demand by result intent) ----
+    // 纯计算: 非 AUIPC/LUI 的 ALU 指令, 结果写入 GPR 且来自 ALU
+    val isPureCompute = isALU && !isAuipc && !isLui &&
+                         io.wb_gpr_write_enable &&
+                         io.wb_reg_write_data_sel === RD_MUX_ALU
+    io.perf.ex.adder_compute := RegNext(isPureCompute && io.wb_done, false.B)
+    // Load/store 地址生成
+    io.perf.ex.adder_agen_ls := RegNext((isLoad || isStore) && io.wb_done, false.B)
+    // 分支目标: branch/JAL (taken), 即 compBranchEnable 为真或 cuJumpEnable 为真
+    // 通过 wb_comp_branch_enable 和 inst_jal/inst_jalr 判断
+    val decBranchTaken = isBranch && io.wb_comp_branch_enable
+    io.perf.ex.adder_agen_branch := RegNext((decBranchTaken || io.wb_inst_jal ||
+                                              io.wb_inst_jalr) && io.wb_done, false.B)
+    // AUIPC: pc+imm → GPR
+    io.perf.ex.adder_agen_auipc := RegNext(isAuipc && io.wb_done, false.B)
+
+    // ---- 同周期并发需求 (same-cycle concurrency) ----
+    // 三个类别必须互斥且完全覆盖退休指令集.
+    // 仅需 PC 目标: JAL, JALR, ecall, mret (epcRecover), CSR mret
+    // (CSR 指令中 mret 会置 epcRecoverEnable, 即 wb_csr_write2_enable 不涵盖 mret)
+    // 简化: 非 branch/ALU/load/store 的指令
+    val decPcOnly = (io.wb_inst_jal || io.wb_inst_jalr || isCSR) && !isLoad && !isStore && !isBranch
+    // Both: taken branch (ALU 计算目标 + PC 目标改变) 或 AUIPC (ALU 计算 + PC 变化?)
+    // AUIPC 不改变 PC target (pcNext 为默认), 故仅为 ALU only
+    // taken branch: ALU 计算 pc+imm → PC target consumed
+    val decBoth = decBranchTaken
+    // decPcOnly 和 decBoth 先选出特殊类别; decAluOnly 作为残余类别涵盖其余所有指令
+    // (untaken branch, AUIPC, ecall/mret, 以及其他既非分支也非 PC-only 的指令).
+    val decAluOnly = !decPcOnly && !decBoth
+
+    io.perf.ex.concurrency_alu_only := RegNext(decAluOnly && io.wb_done, false.B)
+    io.perf.ex.concurrency_pc_only  := RegNext(decPcOnly && io.wb_done, false.B)
+    io.perf.ex.concurrency_both     := RegNext(decBoth && io.wb_done, false.B)
 }

@@ -123,6 +123,257 @@ class PerfTrapDPIBundle(xLen: Int) extends DPIBundle {
 }
 
 /**
+  * 流水级阶段生命周期子束: 各阶段入口/出口的 fire 事件.
+  *
+  * 捕获 Decoupled 握手完成信号, 用于观测流水级之间的数据传递边界:
+  *  - entry_fire: 数据从上游成功进入本级 (prevStage.fire 或 executionInfo.fire)
+  *  - exit_fire:  数据从本级成功传递给下游 (nextStage.fire 或 done)
+  *
+  * 与未来 C++ counter 映射 (T3+):
+  *  阶段生命周期计数 → 每个 entry_fire/exit_fire 脉冲累加
+  *  各阶段激活→退出的 cycle 差 → 阶段延迟分析
+  */
+class PerfPhaseDPIBundle(xLen: Int) extends DPIBundle {
+    Assertion.assertProcessorXLen(xLen)
+
+    // ---- Stage entry ----
+    val if_entry_fire  = Output(Bool()) // IF: executionInfo.fire
+    val id_entry_fire  = Output(Bool()) // ID: prevStage.fire (from IF)
+    val ex_entry_fire  = Output(Bool()) // EX: prevStage.fire (from ID)
+    val mem_entry_fire = Output(Bool()) // MEM: prevStage.fire (from EX)
+    val wb_entry_fire  = Output(Bool()) // WB: prevStage.fire (from MEM)
+
+    // ---- Stage exit ----
+    val if_exit_fire   = Output(Bool()) // IF: nextStage.fire (to ID)
+    val id_exit_fire   = Output(Bool()) // ID: nextStage.fire (to EX)
+    val ex_exit_fire   = Output(Bool()) // EX: nextStage.fire (to MEM)
+    val mem_exit_fire  = Output(Bool()) // MEM: nextStage.fire (to WB)
+    val wb_exit_fire   = Output(Bool()) // WB: done (retirement)
+}
+
+/**
+  * 寄存器上下文子束: GPR/CSR 写事件与写回数据源/模式的分解.
+  *
+  * 观测寄存器写事件和字段使用 (regWriteDataSel / csrRegWriteDataSel 分解),
+  * 基于 MEM_WB 阶段已有的控制信号, 不引入新的译码逻辑.
+  *
+  * 与未来 C++ counter 映射 (T3):
+  *  gpr_wb_fire → reg.gpr.write.count
+  *  csr_wb_fire → reg.csr.write.count
+  *  gpr_src_*   → reg.gpr.src.{alu,dmem,imm,pc_next,bcu,csr}.count
+  *  csr_mode_*  → reg.csr.mode.{rw,rs,rc,imm}.count
+  */
+class PerfRegDPIBundle(xLen: Int) extends DPIBundle {
+    Assertion.assertProcessorXLen(xLen)
+
+    // ---- Register write events ----
+    val gpr_wb_fire = Output(Bool())  // GPR writeback fire
+    val csr_wb_fire = Output(Bool())  // CSR writeback fire (any)
+
+    // ---- GPR writeback source decomposition (regWriteDataSel) ----
+    val gpr_src_alu     = Output(Bool())  // RD_MUX_ALU
+    val gpr_src_dmem    = Output(Bool())  // RD_MUX_DMEM
+    val gpr_src_imm     = Output(Bool())  // RD_MUX_IMM
+    val gpr_src_pc_next = Output(Bool())  // RD_MUX_PC_N
+    val gpr_src_bcu     = Output(Bool())  // RD_MUX_BCU
+    val gpr_src_csr     = Output(Bool())  // RD_MUX_CSR_DATA
+
+    // ---- CSR writeback mode decomposition (csrRegWriteDataSel) ----
+    val csr_mode_rw   = Output(Bool())  // CSR_RD_MUX_W (direct rs1 write)
+    val csr_mode_rs   = Output(Bool())  // CSR_RD_MUX_S (bit-set)
+    val csr_mode_rc   = Output(Bool())  // CSR_RD_MUX_C (bit-clear)
+    val csr_mode_imm  = Output(Bool())  // CSR_RD_MUX_W_IMM / S_IMM / C_IMM
+}
+
+/**
+  * GPR 利用率子束: GPR 读/写端口真实活动与语义消费分解.
+  *
+  * 从 IDU 退火事件 (nextStage.fire) 观测 GPR 读端口利用,
+  * 从 WBU 写回事件 (done) 观测 GPR 写抑制.
+  *
+  * 与未来 C++ counter 映射 (T4):
+  *  gpr_read_* → gpr.read.*.count
+  *  gpr_write_suppressed_x0 → gpr.write.suppressed_x0.count
+  */
+class PerfGprDPIBundle(xLen: Int) extends DPIBundle {
+    Assertion.assertProcessorXLen(xLen)
+
+    val gpr_read_rs1               = Output(Bool())
+    val gpr_read_rs2               = Output(Bool())
+    val gpr_read_both              = Output(Bool())
+    val gpr_read_rs1_x0            = Output(Bool())
+    val gpr_read_rs2_x0            = Output(Bool())
+    val gpr_read_rs1_eq_rs2        = Output(Bool())
+    val gpr_read_rs2_unused        = Output(Bool())
+    val gpr_read_upper16           = Output(Bool())
+    val gpr_write_suppressed_x0    = Output(Bool())
+}
+
+/**
+  * CSR 利用率子束: CSR 读端口并发、写入分类与地址分布.
+  *
+  * 从 IDU 观测 CSR 读端口并发 (3 个端口),
+  * 从 WBU 观测 CSR 写分类 (normal/trap/return) 与目标地址.
+  *
+  * 与未来 C++ counter 映射 (T4):
+  *  csr_read_port* → csr.read.port*.enable.count
+  *  csr_read_concurrent_* → csr.read.concurrent_*.count
+  *  csr_write_* → csr.write.*.count
+  *  csr_addr_* → csr.addr.*.count
+  */
+class PerfCsrDPIBundle(xLen: Int) extends DPIBundle {
+    Assertion.assertProcessorXLen(xLen)
+
+    val csr_read_port1_enable       = Output(Bool())
+    val csr_read_port2_enable       = Output(Bool())
+    val csr_read_port3_enable       = Output(Bool())
+    val csr_read_concurrent_2port   = Output(Bool())
+    val csr_read_concurrent_3port   = Output(Bool())
+    val csr_write_normal            = Output(Bool())
+    val csr_write_trap              = Output(Bool())
+    val csr_write_return            = Output(Bool())
+    val csr_addr_mstatus            = Output(Bool())
+    val csr_addr_mtvec              = Output(Bool())
+    val csr_addr_mepc               = Output(Bool())
+    val csr_addr_mcause             = Output(Bool())
+    val csr_addr_mtval              = Output(Bool())
+    val csr_addr_mvendorid          = Output(Bool())
+    val csr_addr_marchid            = Output(Bool())
+}
+
+/**
+  * IFetch 事务与相位分解子束: IFU 取指请求/响应/阶段周期.
+  *
+  * 捕获 IFetch 事务边界 (request/response fire) 与 IFU 状态机相位,
+  * 用于分析取指延迟来源与前端的反馈式停顿.
+  *
+  * FSM 相位映射:
+  *   s_idle                    → accept_pc       (等待 PC)
+  *   s_waitData                → prepare_request (内部准备)
+  *   s_sendFetchReq            → request_blocked (向 LSU 发送取指请求)
+  *   s_waitResp                → wait_response   (等待 LSU 返回数据)
+  *   s_wait_nextStage_ready    → response_buffered / output_blocked (数据就绪, 等待下游)
+  *
+  * 与 C++ counter 映射 (T5):
+  *   request_fire                → ifetch.request.count
+  *   lsu_req_fire                → ifetch.lsu_req.fire.count
+  *   axi_ar_fire                 → ifetch.axi_ar.fire.count
+  *   axi_r_fire                  → ifetch.axi_r.fire.count
+  *   response_fire               → ifetch.response.fire.count
+  *   consumer_ready_at_response  → ifetch.consumer_ready_at_response.count
+  *   response_consumed_first_cycle → ifetch.response_consumed_first_cycle.count
+  *   phase_*                     → ifetch.phase.<name>.cycle
+  */
+class PerfIfetchDPIBundle(xLen: Int) extends DPIBundle {
+    Assertion.assertProcessorXLen(xLen)
+
+    // ---- IFetch 事务事件 ----
+    val request_fire                  = Output(Bool())  // executionInfo.fire (新 PC 触发)
+    val lsu_req_fire                  = Output(Bool())  // IFU→LSU 取指请求握手
+    val axi_ar_fire                   = Output(Bool())  // IFetch 的 AXI AR 握手
+    val axi_r_fire                    = Output(Bool())  // IFetch 的 AXI R 握手
+    val response_fire                 = Output(Bool())  // LSU→IFU 取指响应握手
+    val consumer_ready_at_response    = Output(Bool())  // 响应到达时下游 (ID) ready
+    val response_consumed_first_cycle = Output(Bool())  // 响应到达后首个周期即被消费
+
+    // ---- IFetch 相位周期 (互斥) ----
+    val phase_accept_pc        = Output(Bool())  // s_idle     : 空闲, 等待新 PC
+    val phase_prepare_request  = Output(Bool())  // s_waitData : 内部准备 (1 周期)
+    val phase_request_blocked  = Output(Bool())  // s_sendFetchReq : 向 LSU 发送请求
+    val phase_wait_response    = Output(Bool())  // s_waitResp : 等待 LSU 响应
+    val phase_response_buffered = Output(Bool()) // s_wait_nextStage_ready && !nextStage.ready
+    val phase_output_blocked   = Output(Bool())  // s_wait_nextStage_ready && nextStage.ready
+}
+
+/**
+  * LSU 事务与相位分解子束: 访存分解, AXI 信道计数, 存储串行化观测.
+  *
+  * 观测 LSU 内部的 load/store 分解 (对齐/非对齐, byte/half/word),
+  * AXI 信道握手, 以及 AW/W 串行化机会.
+  *
+  * 与 C++ counter 映射 (T5):
+  *   load_byte/half/word_fire      → lsu.load.{byte,half,word}.count
+  *   load_aligned/unaligned_fire   → lsu.load.{aligned,unaligned}.count
+  *   store_byte/half/word_fire     → lsu.store.{byte,half,word}.count
+  *   store_aligned/unaligned_fire  → lsu.store.{aligned,unaligned}.count
+  *   unaligned_extra_transaction   → lsu.unaligned.extra_transaction.count
+  *   axi_{ar,aw,w,r,b}_fire        → lsu.axi.{ar,aw,w,r,b}.fire.count
+  *   concurrent_ready_opportunity  → lsu.store.concurrent_ready_opportunity.cycle
+  *   aw_done_wait_w                → lsu.store.aw_done_wait_w.cycle
+  *   w_done_wait_aw                → lsu.store.w_done_wait_aw.cycle
+  */
+class PerfLsuDPIBundle(xLen: Int) extends DPIBundle {
+    Assertion.assertProcessorXLen(xLen)
+
+    // ---- Load 分解 (在 MEM→LSU req fire 时刻观测) ----
+    val load_byte_fire        = Output(Bool())
+    val load_half_fire        = Output(Bool())
+    val load_word_fire        = Output(Bool())
+    val load_aligned_fire     = Output(Bool())
+    val load_unaligned_fire   = Output(Bool())
+
+    // ---- Store 分解 (在 MEM→LSU req fire 时刻观测) ----
+    val store_byte_fire       = Output(Bool())
+    val store_half_fire       = Output(Bool())
+    val store_word_fire       = Output(Bool())
+    val store_aligned_fire    = Output(Bool())
+    val store_unaligned_fire  = Output(Bool())
+
+    // ---- 非对齐额外事务 ----
+    val unaligned_extra_transaction = Output(Bool())
+
+    // ---- AXI 信道握手 (全部事务, 非仅 MEM) ----
+    val axi_ar_fire = Output(Bool())
+    val axi_aw_fire = Output(Bool())
+    val axi_w_fire  = Output(Bool())
+    val axi_r_fire  = Output(Bool())
+    val axi_b_fire  = Output(Bool())
+
+    // ---- Store AW/W 串行化观测 ----
+    val concurrent_ready_opportunity = Output(Bool())
+    val aw_done_wait_w              = Output(Bool())
+    val w_done_wait_aw              = Output(Bool())
+}
+
+/**
+  * EX 阶段 ALU / PC 目标 / 地址生成并发子束: ALU 操作类型分解,
+  * 加法器需求意图, 以及同周期并发需求.
+  *
+  * 从退休指令的 opcode/funct3/funct7 字段与指令分类中推导,
+  * 而非读取原始 ALU/比较器选择器信号 (selector toggles).
+  * 所有信号由 WB stage 退休时确定, 无 EX 阶段直接依赖.
+  *
+  * 与 C++ counter 映射 (T6):
+  *   alu_op_{add,sub,sll,srl,sra,and,or,xor} → alu.op.{add,sub,...}.count
+  *   adder_{compute,agen_ls,agen_branch,agen_auipc} → ex.adder.{compute,...}.count
+  *   concurrency_{alu_only,pc_only,both} → ex.concurrency.{alu_only,...}.count
+  */
+class PerfExDPIBundle(xLen: Int) extends DPIBundle {
+    Assertion.assertProcessorXLen(xLen)
+
+    // ---- ALU 操作类型分解 (8 op types) ----
+    val alu_op_add  = Output(Bool())  // ADD / ADDI / AUIPC / load / store / branch
+    val alu_op_sub  = Output(Bool())  // SUB
+    val alu_op_sll  = Output(Bool())  // SLL / SLLI
+    val alu_op_srl  = Output(Bool())  // SRL / SRLI
+    val alu_op_sra  = Output(Bool())  // SRA / SRAI
+    val alu_op_and  = Output(Bool())  // AND / ANDI
+    val alu_op_or   = Output(Bool())  // OR / ORI
+    val alu_op_xor  = Output(Bool())  // XOR / XORI
+
+    // ---- 加法器需求意图 (adder demand by result intent) ----
+    val adder_compute       = Output(Bool())  // 纯计算: 算术结果写入 GPR (ADD/SUB/ADDI types)
+    val adder_agen_ls       = Output(Bool())  // 地址计算: load/store rs1+imm
+    val adder_agen_branch   = Output(Bool())  // 分支目标: branch/JAL pc+imm (taken)
+    val adder_agen_auipc    = Output(Bool())  // AUIPC: pc+imm → GPR
+
+    // ---- 同周期并发需求 (same-cycle concurrency) ----
+    val concurrency_alu_only  = Output(Bool())  // 仅需 ALU (计算/load/store/LUI)
+    val concurrency_pc_only   = Output(Bool())  // 仅需 PC 目标 (JAL/JALR/ecall/mret)
+    val concurrency_both      = Output(Bool())  // 同时需要 ALU + PC 目标 (taken branch, AUIPC)
+}
+
+/**
   * 性能计数器 DPI 总束.
   *
   * 聚合所有性能语义子束, 作为 `GeneralDPIBundle` 的 `perf` 字段.
@@ -132,10 +383,17 @@ class PerfTrapDPIBundle(xLen: Int) extends DPIBundle {
 class PerfDPIBundle(xLen: Int) extends DPIBundle {
     Assertion.assertProcessorXLen(xLen)
 
-    val core  = new PerfCoreDPIBundle(xLen)
-    val inst  = new PerfInstDPIBundle(xLen)
-    val state = new PerfStateDPIBundle(xLen)
-    val stall = new PerfStallDPIBundle(xLen)
-    val mem   = new PerfMemDPIBundle(xLen)
-    val trap  = new PerfTrapDPIBundle(xLen)
+    val core   = new PerfCoreDPIBundle(xLen)
+    val inst   = new PerfInstDPIBundle(xLen)
+    val state  = new PerfStateDPIBundle(xLen)
+    val stall  = new PerfStallDPIBundle(xLen)
+    val mem    = new PerfMemDPIBundle(xLen)
+    val trap   = new PerfTrapDPIBundle(xLen)
+    val phase  = new PerfPhaseDPIBundle(xLen)
+    val reg    = new PerfRegDPIBundle(xLen)
+    val gpr    = new PerfGprDPIBundle(xLen)
+    val csr    = new PerfCsrDPIBundle(xLen)
+    val ifetch = new PerfIfetchDPIBundle(xLen)
+    val lsu    = new PerfLsuDPIBundle(xLen)
+    val ex     = new PerfExDPIBundle(xLen)
 }

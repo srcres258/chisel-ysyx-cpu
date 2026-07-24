@@ -144,6 +144,44 @@ class NPCWithSoC(val xLen: Int) extends Module {
         perfCollector.io.mem_lsu_resp_ready    := memu.io.lsuMemResp.ready
         perfCollector.io.mem_clint_ar_fire     := memu.io.clintBus.ar.valid && memu.io.clintBus.ar.ready
         perfCollector.io.wb_csr_write2_enable  := wbu.io.csrWritePort2.writeEnable
+        perfCollector.io.if_entry_fire   := ifu.io.executionInfo.fire
+        perfCollector.io.id_entry_fire   := idu.io.prevStage.fire
+        perfCollector.io.ex_entry_fire   := exu.io.prevStage.fire
+        perfCollector.io.mem_entry_fire  := memu.io.prevStage.fire
+        perfCollector.io.wb_entry_fire   := wbu.io.prevStage.fire
+        perfCollector.io.if_exit_fire    := ifu.io.nextStage.fire
+        perfCollector.io.id_exit_fire    := idu.io.nextStage.fire
+        perfCollector.io.ex_exit_fire    := exu.io.nextStage.fire
+        perfCollector.io.mem_exit_fire   := memu.io.nextStage.fire
+        perfCollector.io.wb_exit_fire    := wbu.io.done
+        perfCollector.io.wb_gpr_write_enable  := wbu.io.gprWritePort.writeEnable
+        perfCollector.io.wb_csr_write1_enable := wbu.io.csrWritePort1.writeEnable
+        perfCollector.io.wb_reg_write_data_sel := wbu.io.prevStage.bits.regWriteDataSel
+        perfCollector.io.wb_csr_write_data_sel := wbu.io.prevStage.bits.csrRegWriteDataSel
+        perfCollector.io.idu_rs1              := idu.io.gprReadPort.readAddress1
+        perfCollector.io.idu_rs2              := idu.io.gprReadPort.readAddress2
+        perfCollector.io.idu_rs2_unused       := idu.io.rs2Unused
+        perfCollector.io.idu_is_system_inst   := idu.io.isSystemInst
+        perfCollector.io.idu_csr_read_addr    := idu.io.csrReadPort1.readAddress
+        perfCollector.io.wbu_gpr_write_suppressed_x0 := wbu.io.gprWriteSuppressedX0
+        perfCollector.io.wbu_csr_write_addr   := wbu.io.csrWritePort1.writeAddress
+        // IFetch phase + transaction signals (from IFUnit)
+        perfCollector.io.ifu_ifetch_state    := ifu.io.ifetchState
+        perfCollector.io.ifu_nextStage_ready := ifu.io.nextStage.ready
+        // LSU observation signals (from LoadAndStoreUnit)
+        perfCollector.io.lsu_state            := lsu.io.perfState
+        perfCollector.io.lsu_pending_fetch    := lsu.io.perfPendingFetch
+        perfCollector.io.lsu_pending_write    := lsu.io.perfPendingWrite
+        perfCollector.io.lsu_needs_byte_split := lsu.io.perfNeedsByteSplit
+        perfCollector.io.lsu_pending_ls_type  := lsu.io.perfPendingLsType
+        perfCollector.io.lsu_axi_ar_fire      := lsu.io.memBus.ar.valid && lsu.io.memBus.ar.ready
+        perfCollector.io.lsu_axi_aw_fire      := lsu.io.memBus.aw.valid && lsu.io.memBus.aw.ready
+        perfCollector.io.lsu_axi_w_fire       := lsu.io.memBus.w.valid && lsu.io.memBus.w.ready
+        perfCollector.io.lsu_axi_r_fire       := lsu.io.memBus.r.valid && lsu.io.memBus.r.ready
+        perfCollector.io.lsu_axi_b_fire       := lsu.io.memBus.b.valid && lsu.io.memBus.b.ready
+        perfCollector.io.lsu_aw_ready         := lsu.io.memBus.aw.ready
+        perfCollector.io.lsu_w_ready          := lsu.io.memBus.w.ready
+        perfCollector.io.wb_comp_branch_enable := wbu.io.prevStage.bits.compBranchEnable
         generalDPI.perf <> perfCollector.io.perf
 
         val dpi = Module(new GeneralDPIAdapter(xLen))
@@ -271,6 +309,44 @@ class NPCStandalone(val xLen: Int) extends Module {
         perfCollector.io.mem_lsu_resp_ready    := memu.io.lsuMemResp.ready
         perfCollector.io.mem_clint_ar_fire     := memu.io.clintBus.ar.valid && memu.io.clintBus.ar.ready
         perfCollector.io.wb_csr_write2_enable  := wbu.io.csrWritePort2.writeEnable
+        perfCollector.io.if_entry_fire   := ifu.io.executionInfo.fire
+        perfCollector.io.id_entry_fire   := idu.io.prevStage.fire
+        perfCollector.io.ex_entry_fire   := exu.io.prevStage.fire
+        perfCollector.io.mem_entry_fire  := memu.io.prevStage.fire
+        perfCollector.io.wb_entry_fire   := wbu.io.prevStage.fire
+        perfCollector.io.if_exit_fire    := ifu.io.nextStage.fire
+        perfCollector.io.id_exit_fire    := idu.io.nextStage.fire
+        perfCollector.io.ex_exit_fire    := exu.io.nextStage.fire
+        perfCollector.io.mem_exit_fire   := memu.io.nextStage.fire
+        perfCollector.io.wb_exit_fire    := wbu.io.done
+        perfCollector.io.wb_gpr_write_enable  := wbu.io.gprWritePort.writeEnable
+        perfCollector.io.wb_csr_write1_enable := wbu.io.csrWritePort1.writeEnable
+        perfCollector.io.wb_reg_write_data_sel := wbu.io.prevStage.bits.regWriteDataSel
+        perfCollector.io.wb_csr_write_data_sel := wbu.io.prevStage.bits.csrRegWriteDataSel
+        perfCollector.io.idu_rs1              := idu.io.gprReadPort.readAddress1
+        perfCollector.io.idu_rs2              := idu.io.gprReadPort.readAddress2
+        perfCollector.io.idu_rs2_unused       := idu.io.rs2Unused
+        perfCollector.io.idu_is_system_inst   := idu.io.isSystemInst
+        perfCollector.io.idu_csr_read_addr    := idu.io.csrReadPort1.readAddress
+        perfCollector.io.wbu_gpr_write_suppressed_x0 := wbu.io.gprWriteSuppressedX0
+        perfCollector.io.wbu_csr_write_addr   := wbu.io.csrWritePort1.writeAddress
+        // IFetch phase + transaction signals (from IFUnit)
+        perfCollector.io.ifu_ifetch_state    := ifu.io.ifetchState
+        perfCollector.io.ifu_nextStage_ready := ifu.io.nextStage.ready
+        // LSU observation signals (from LoadAndStoreUnit)
+        perfCollector.io.lsu_state            := lsu.io.perfState
+        perfCollector.io.lsu_pending_fetch    := lsu.io.perfPendingFetch
+        perfCollector.io.lsu_pending_write    := lsu.io.perfPendingWrite
+        perfCollector.io.lsu_needs_byte_split := lsu.io.perfNeedsByteSplit
+        perfCollector.io.lsu_pending_ls_type  := lsu.io.perfPendingLsType
+        perfCollector.io.lsu_axi_ar_fire      := lsu.io.memBus.ar.valid && lsu.io.memBus.ar.ready
+        perfCollector.io.lsu_axi_aw_fire      := lsu.io.memBus.aw.valid && lsu.io.memBus.aw.ready
+        perfCollector.io.lsu_axi_w_fire       := lsu.io.memBus.w.valid && lsu.io.memBus.w.ready
+        perfCollector.io.lsu_axi_r_fire       := lsu.io.memBus.r.valid && lsu.io.memBus.r.ready
+        perfCollector.io.lsu_axi_b_fire       := lsu.io.memBus.b.valid && lsu.io.memBus.b.ready
+        perfCollector.io.lsu_aw_ready         := lsu.io.memBus.aw.ready
+        perfCollector.io.lsu_w_ready          := lsu.io.memBus.w.ready
+        perfCollector.io.wb_comp_branch_enable := wbu.io.prevStage.bits.compBranchEnable
         generalDPI.perf <> perfCollector.io.perf
 
         val dpi = Module(new GeneralDPIAdapter(xLen))

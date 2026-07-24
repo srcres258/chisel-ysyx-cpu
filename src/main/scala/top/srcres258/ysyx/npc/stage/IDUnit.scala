@@ -30,6 +30,14 @@ class IDUnit(val xLen: Int) extends Module {
         val nextStage = Decoupled(Output(new ID_EX_Bundle(xLen)))
 
         val working = Output(Bool())
+
+        // ── Perf observability: GPR/CSR utilization ──
+        /** Instruction does NOT semantically use rs2 as a register source.
+          * True for I-type (ALU/load/JALR/FENCE/SYSTEM), U-type, J-type.
+          * False for R-type, B-type, S-type. */
+        val rs2Unused = Output(Bool())
+        /** Instruction opcode is SYSTEM (0x73): includes CSR, ecall, mret. */
+        val isSystemInst = Output(Bool())
     })
 
     val dpi = if (Config.enableDPI) Some(IO(new IDUnitDPIBundle(xLen))) else None
@@ -185,4 +193,15 @@ class IDUnit(val xLen: Int) extends Module {
     }
 
     io.working := state =/= s_idle
+
+    // ── Perf observability: instruction-class flags derived from opcode ──
+    // rs2 is semantically used as a register source only for:
+    //   R-type (0110011), B-type (1100011), S-type (0100011)
+    // All other RV32I opcodes (I-type variants, U-type, J-type, SYSTEM) do NOT
+    // use rs2 as a register operand.
+    val opcode = prevStageData.inst(6, 0)
+    io.rs2Unused := opcode =/= "b0110011".U(7.W) &&
+                    opcode =/= "b1100011".U(7.W) &&
+                    opcode =/= "b0100011".U(7.W)
+    io.isSystemInst := opcode === "b1110011".U(7.W)
 }
