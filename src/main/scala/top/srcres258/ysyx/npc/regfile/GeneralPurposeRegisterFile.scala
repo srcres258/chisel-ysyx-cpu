@@ -16,13 +16,21 @@ class GeneralPurposeRegisterFile(
       */
     val xLen: Int,
     /**
-      * regAddrWidth: 寄存器 (GPR) 编号位数，在 RV32I 指令集中为 5.
+      * regAddrWidth: 寄存器 (GPR) 编号位数, 在 RV32I 指令集中为 5.
       */
-    val regAddrWidth: Int = 5
+    val regAddrWidth: Int = 5,
+    /**
+      * regCount: 寄存器数量. 要求数量必须在 regAddrWidth 可表示的范围内.
+      * 例如在 RV32I 指令集中, regAddrWidth 为 5, 则 regCount 最大为 2^5 - 1 = 31.
+      * (x0 硬编码为 0 不算有效寄存器.)
+      */
+    val gprCount: Int = 16
 ) extends Module {
     Assertion.assertProcessorXLen(xLen)
-
-    private val gprCount = (1 << regAddrWidth) - 1
+    assert(
+        gprCount <= (1 << regAddrWidth) - 1,
+        s"gprCount ($gprCount) must be less than or equal to 2^regAddrWidth (${1 << regAddrWidth})."
+    )
 
     val io = IO(new Bundle {
         val readPort = new GeneralPurposeRegisterFile.ReadPort(xLen, regAddrWidth)
@@ -33,11 +41,13 @@ class GeneralPurposeRegisterFile(
 
     val registers = RegInit(VecInit(Seq.fill(gprCount)(0.U(xLen.W))))
 
-    io.readPort.readData1 := MuxLookup(io.readPort.readAddress1, 0.U)((1 until (1 << regAddrWidth)).map(i => i.U -> registers(i - 1)).toSeq)
-    io.readPort.readData2 := MuxLookup(io.readPort.readAddress2, 0.U)((1 until (1 << regAddrWidth)).map(i => i.U -> registers(i - 1)).toSeq)
+    io.readPort.readData1 := MuxLookup(io.readPort.readAddress1, 0.U)((1 until (gprCount + 1))
+        .map(i => i.U -> registers(i - 1)).toSeq)
+    io.readPort.readData2 := MuxLookup(io.readPort.readAddress2, 0.U)((1 until (gprCount + 1))
+        .map(i => i.U -> registers(i - 1)).toSeq)
 
     when(io.writePort.writeEnable && io.writePort.writeAddress.orR) {
-        for (i <- 1 until (1 << regAddrWidth)) {
+        for (i <- 1 until (gprCount + 1)) {
             when(io.writePort.writeAddress === i.U) {
                 registers(i - 1) := io.writePort.writeData
             }
@@ -47,7 +57,11 @@ class GeneralPurposeRegisterFile(
     dpi.foreach { dpiBundle =>
         dpiBundle.gprs(0) := 0.U
         for (i <- 1 until dpiBundle.gprs.length) {
-            dpiBundle.gprs(i) := registers(i - 1)
+            if (i <= gprCount) {
+                dpiBundle.gprs(i) := registers(i - 1)
+            } else {
+                dpiBundle.gprs(i) := 0.U
+            }
         }
     }
 }
