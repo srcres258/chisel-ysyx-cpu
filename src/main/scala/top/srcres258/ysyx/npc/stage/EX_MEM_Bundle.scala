@@ -14,7 +14,6 @@ class EX_MEM_Bundle(xLen: Int) extends StageUnitBundle(xLen) {
     Assertion.assertProcessorXLen(xLen)
 
     val pcCur = UInt(xLen.W)
-    val pcNext = UInt(xLen.W)
     val inst = UInt(xLen.W)
     val pcTarget = UInt(xLen.W)
     // 注: 由于分支目标地址本身也经 ALU 计算, 所以当分支启用时,
@@ -26,11 +25,8 @@ class EX_MEM_Bundle(xLen: Int) extends StageUnitBundle(xLen) {
     val imm = UInt(xLen.W)
     val rd = UInt(5.W)
     val rs1 = UInt(5.W)
-    val rs2 = UInt(5.W)
     val csr = UInt(12.W)
     val csrData = UInt(xLen.W)
-    val zimm = UInt(xLen.W)
-    val ecallCause = UInt(xLen.W)
     // 控制信号组
     val lsType = UInt(LoadAndStoreUnit.LS_TYPE_LEN.W)
     val memReadEnable = Bool()
@@ -40,15 +36,11 @@ class EX_MEM_Bundle(xLen: Int) extends StageUnitBundle(xLen) {
     val regWriteDataSel = UInt(ControlUnit.RD_MUX_SEL_LEN.W)
     val csrRegWriteDataSel = UInt(ControlUnit.CSR_RD_MUX_SEL_LEN.W)
     val ecallEnable = Bool()
-    // 调试信号 (仅供仿真使用)
-    val inst_jal = Bool()
-    val inst_jalr = Bool()
 }
 
 object EX_MEM_Bundle {
     def setDefaultValues(bundle: EX_MEM_Bundle): Unit = {
         bundle.pcCur := 0.U
-        bundle.pcNext := 0.U
         bundle.inst := 0.U
         bundle.pcTarget := 0.U
         bundle.aluOutput := 0.U
@@ -58,11 +50,8 @@ object EX_MEM_Bundle {
         bundle.imm := 0.U
         bundle.rd := 0.U
         bundle.rs1 := 0.U
-        bundle.rs2 := 0.U
         bundle.csr := 0.U
         bundle.csrData := 0.U
-        bundle.zimm := 0.U
-        bundle.ecallCause := 0.U
         bundle.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
         bundle.memReadEnable := false.B
         bundle.memWriteEnable := false.B
@@ -71,8 +60,6 @@ object EX_MEM_Bundle {
         bundle.regWriteDataSel := 0.U
         bundle.csrRegWriteDataSel := 0.U
         bundle.ecallEnable := false.B
-        bundle.inst_jal := false.B
-        bundle.inst_jalr := false.B
     }
 
     def apply(xLen: Int): EX_MEM_Bundle = {

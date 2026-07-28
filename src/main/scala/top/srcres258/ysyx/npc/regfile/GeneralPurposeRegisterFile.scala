@@ -22,6 +22,8 @@ class GeneralPurposeRegisterFile(
 ) extends Module {
     Assertion.assertProcessorXLen(xLen)
 
+    private val gprCount = (1 << regAddrWidth) - 1
+
     val io = IO(new Bundle {
         val readPort = new GeneralPurposeRegisterFile.ReadPort(xLen, regAddrWidth)
         val writePort = new GeneralPurposeRegisterFile.WritePort(xLen, regAddrWidth)
@@ -29,19 +31,23 @@ class GeneralPurposeRegisterFile(
 
     val dpi = if (Config.enableDPI) Some(IO(new GeneralPurposeRegisterFileDPIBundle(xLen))) else None
 
-    val registers = RegInit(VecInit(Seq.fill(1 << regAddrWidth)(0.U(xLen.W))))
-    registers(0.U) := 0.U // RISC-V 规范规定：x0 寄存器恒为 0.
+    val registers = RegInit(VecInit(Seq.fill(gprCount)(0.U(xLen.W))))
 
-    io.readPort.readData1 := Mux(io.readPort.readAddress1.orR, registers(io.readPort.readAddress1), 0.U)
-    io.readPort.readData2 := Mux(io.readPort.readAddress2.orR, registers(io.readPort.readAddress2), 0.U)
+    io.readPort.readData1 := MuxLookup(io.readPort.readAddress1, 0.U)((1 until (1 << regAddrWidth)).map(i => i.U -> registers(i - 1)).toSeq)
+    io.readPort.readData2 := MuxLookup(io.readPort.readAddress2, 0.U)((1 until (1 << regAddrWidth)).map(i => i.U -> registers(i - 1)).toSeq)
 
     when(io.writePort.writeEnable && io.writePort.writeAddress.orR) {
-        registers(io.writePort.writeAddress) := io.writePort.writeData
+        for (i <- 1 until (1 << regAddrWidth)) {
+            when(io.writePort.writeAddress === i.U) {
+                registers(i - 1) := io.writePort.writeData
+            }
+        }
     }
 
     dpi.foreach { dpiBundle =>
-        for (i <- 0 until dpiBundle.gprs.length) {
-            dpiBundle.gprs(i) := registers(i)
+        dpiBundle.gprs(0) := 0.U
+        for (i <- 1 until dpiBundle.gprs.length) {
+            dpiBundle.gprs(i) := registers(i - 1)
         }
     }
 }

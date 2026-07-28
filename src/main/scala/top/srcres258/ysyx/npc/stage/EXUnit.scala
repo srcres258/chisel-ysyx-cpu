@@ -102,7 +102,6 @@ class EXUnit(val xLen: Int) extends Module {
     pcTargetCtrl.io.tvecData := prevStageData.tvecData
 
     nextStageData.pcCur := prevStageData.pcCur
-    nextStageData.pcNext := prevStageData.pcNext
     nextStageData.inst := prevStageData.inst
     nextStageData.pcTarget := pcTargetCtrl.io.pcTarget
     nextStageData.aluOutput := aluOutput
@@ -112,11 +111,8 @@ class EXUnit(val xLen: Int) extends Module {
     nextStageData.imm := prevStageData.imm
     nextStageData.rd := prevStageData.rd
     nextStageData.rs1 := prevStageData.rs1
-    nextStageData.rs2 := prevStageData.rs2
     nextStageData.csr := prevStageData.csr
     nextStageData.csrData := prevStageData.csrData
-    nextStageData.zimm := prevStageData.zimm
-    nextStageData.ecallCause := prevStageData.ecallCause
     nextStageData.lsType := prevStageData.lsType
     nextStageData.memReadEnable := prevStageData.memReadEnable
     nextStageData.memWriteEnable := prevStageData.memWriteEnable
@@ -125,8 +121,6 @@ class EXUnit(val xLen: Int) extends Module {
     nextStageData.regWriteDataSel := prevStageData.regWriteDataSel
     nextStageData.csrRegWriteDataSel := prevStageData.csrRegWriteDataSel
     nextStageData.ecallEnable := prevStageData.ecallEnable
-    nextStageData.inst_jal := prevStageData.inst_jal
-    nextStageData.inst_jalr := prevStageData.inst_jalr
 
     dpi.foreach { dpiBundle =>
         when(state === s_wait_nextStage_ready) {

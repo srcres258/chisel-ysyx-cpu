@@ -14,7 +14,6 @@ class MEM_WB_Bundle(xLen: Int) extends StageUnitBundle(xLen) {
     Assertion.assertProcessorXLen(xLen)
 
     val pcCur = UInt(xLen.W)
-    val pcNext = UInt(xLen.W)
     val inst = UInt(xLen.W)
     val pcTarget = UInt(xLen.W)
     val memReadData = UInt(xLen.W)
@@ -24,25 +23,19 @@ class MEM_WB_Bundle(xLen: Int) extends StageUnitBundle(xLen) {
     val imm = UInt(xLen.W)
     val rd = UInt(5.W)
     val rs1 = UInt(5.W)
-    val rs2 = UInt(5.W)
     val csr = UInt(12.W)
     val csrData = UInt(xLen.W)
-    val zimm = UInt(xLen.W)
-    val ecallCause = UInt(xLen.W)
     // 控制信号组
     val regWriteEnable = Bool()
     val csrRegWriteEnable = Bool()
     val regWriteDataSel = UInt(ControlUnit.RD_MUX_SEL_LEN.W)
     val csrRegWriteDataSel = UInt(ControlUnit.CSR_RD_MUX_SEL_LEN.W)
     val ecallEnable = Bool()
-    val inst_jal = Bool()
-    val inst_jalr = Bool()
 }
 
 object MEM_WB_Bundle {
     def setDefaultValues(bundle: MEM_WB_Bundle): Unit = {
         bundle.pcCur := 0.U
-        bundle.pcNext := 0.U
         bundle.inst := 0.U
         bundle.pcTarget := Config.pcInitialVal.U
         bundle.memReadData := 0.U
@@ -52,18 +45,13 @@ object MEM_WB_Bundle {
         bundle.imm := 0.U
         bundle.rd := 0.U
         bundle.rs1 := 0.U
-        bundle.rs2 := 0.U
         bundle.csr := 0.U
         bundle.csrData := 0.U
-        bundle.zimm := 0.U
-        bundle.ecallCause := 0.U
         bundle.regWriteEnable := false.B
         bundle.csrRegWriteEnable := false.B
         bundle.regWriteDataSel := 0.U
         bundle.csrRegWriteDataSel := 0.U
         bundle.ecallEnable := false.B
-        bundle.inst_jal := false.B
-        bundle.inst_jalr := false.B
     }
 
     def apply(xLen: Int): MEM_WB_Bundle = {

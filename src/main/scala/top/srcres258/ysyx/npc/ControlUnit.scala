@@ -64,7 +64,7 @@ class ControlUnit(val xLen: Int) extends Module {
 
         /* ----- RV32I 指令 ----- */
         when(io.opCode === ControlUnit.OP_R_TYPE.U(7.W)) {
-            io.regWriteEnable := true.B
+            io.regWriteEnable := io.rd.orR
             io.immSel := ControlUnit.IMM_UNKNOWN_TYPE.U
             io.executePortASel := true.B
 
@@ -183,7 +183,7 @@ class ControlUnit(val xLen: Int) extends Module {
             io.dataMemWriteEnable := true.B
             io.regWriteDataSel := ControlUnit.RD_MUX_UNKNOWN.U
         }.elsewhen(io.opCode === ControlUnit.OP_I_JALR_TYPE.U(7.W)) {
-            io.regWriteEnable := true.B
+            io.regWriteEnable := io.rd.orR
             io.immSel := ControlUnit.IMM_I_TYPE.U
             io.executePortASel := true.B
             io.executePortBSel := false.B
@@ -195,7 +195,7 @@ class ControlUnit(val xLen: Int) extends Module {
             io.jumpEnable := true.B
             io.jumpType := ControlUnit.JUMP_TYPE_JALR.U
         }.elsewhen(io.opCode === ControlUnit.OP_I_LOAD_TYPE.U(7.W)) {
-            io.regWriteEnable := true.B
+            io.regWriteEnable := io.rd.orR
             io.immSel := ControlUnit.IMM_I_TYPE.U
             io.executePortASel := true.B
             io.executePortBSel := false.B
@@ -222,7 +222,7 @@ class ControlUnit(val xLen: Int) extends Module {
             io.dataMemReadEnable := true.B
             io.regWriteDataSel := ControlUnit.RD_MUX_DMEM.U
         }.elsewhen(io.opCode === ControlUnit.OP_I_ALU_TYPE.U(7.W)) {
-            io.regWriteEnable := true.B
+            io.regWriteEnable := io.rd.orR
             io.immSel := ControlUnit.IMM_I_TYPE.U
             io.executePortASel := true.B
 
@@ -309,7 +309,7 @@ class ControlUnit(val xLen: Int) extends Module {
                 // TODO 实现 ebreak 指令
             }
         }.elsewhen(io.opCode === ControlUnit.OP_U_LUI_TYPE.U(7.W)) {
-            io.regWriteEnable := true.B
+            io.regWriteEnable := io.rd.orR
             io.immSel := ControlUnit.IMM_U_TYPE.U
             io.executePortASel := false.B
             io.executePortBSel := false.B
@@ -318,7 +318,7 @@ class ControlUnit(val xLen: Int) extends Module {
             io.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
             io.regWriteDataSel := ControlUnit.RD_MUX_IMM.U
         }.elsewhen(io.opCode === ControlUnit.OP_U_AUIPC_TYPE.U(7.W)) {
-            io.regWriteEnable := true.B
+            io.regWriteEnable := io.rd.orR
             io.immSel := ControlUnit.IMM_U_TYPE.U
             io.executePortASel := false.B
             io.executePortBSel := false.B
@@ -327,7 +327,7 @@ class ControlUnit(val xLen: Int) extends Module {
             io.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
             io.regWriteDataSel := ControlUnit.RD_MUX_ALU.U
         }.elsewhen(io.opCode === ControlUnit.OP_J_TYPE.U(7.W)) {
-            io.regWriteEnable := true.B
+            io.regWriteEnable := io.rd.orR
             io.immSel := ControlUnit.IMM_J_TYPE.U
             io.executePortASel := false.B
             io.executePortBSel := false.B
@@ -341,7 +341,7 @@ class ControlUnit(val xLen: Int) extends Module {
 
         /* ----- Zicsr 指令 ----- */
         when(io.opCode === ControlUnit.OP_I_CSR_TYPE.U(7.W)) {
-            io.regWriteEnable := true.B
+            io.regWriteEnable := io.rd.orR
             io.csrRegWriteEnable := true.B
             io.immSel := ControlUnit.IMM_I_TYPE.U
             io.executePortASel := false.B

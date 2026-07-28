@@ -35,26 +35,27 @@ class ControlAndStatusRegisterFile(
     val registers = RegInit(ControlAndStatusRegisterFile.RegisterBundle(xLen))
     val roRegisters = ControlAndStatusRegisterFile.ReadOnlyRegisterBundle(xLen)
 
-    Seq(io.readPort1, io.readPort2, io.readPort3).foreach(readPort => {
-        readPort.readData := 0.U
-        when(readPort.readAddress.orR) {
-            when(readPort.readAddress === ControlAndStatusRegisterFile.CSR_MSTATUS.U(regAddrWidth.W)) {
-                readPort.readData := registers.mstatus
-            }.elsewhen(readPort.readAddress === ControlAndStatusRegisterFile.CSR_MTVEC.U(regAddrWidth.W)) {
-                readPort.readData := registers.mtvec
-            }.elsewhen(readPort.readAddress === ControlAndStatusRegisterFile.CSR_MEPC.U(regAddrWidth.W)) {
-                readPort.readData := registers.mepc
-            }.elsewhen(readPort.readAddress === ControlAndStatusRegisterFile.CSR_MCAUSE.U(regAddrWidth.W)) {
-                readPort.readData := registers.mcause
-            }.elsewhen(readPort.readAddress === ControlAndStatusRegisterFile.CSR_MTVAL.U(regAddrWidth.W)) {
-                readPort.readData := registers.mtval
-            }.elsewhen(readPort.readAddress === ControlAndStatusRegisterFile.CSR_MVENDORID.U(regAddrWidth.W)) {
-                readPort.readData := roRegisters.mvendorid
-            }.elsewhen(readPort.readAddress === ControlAndStatusRegisterFile.CSR_MARCHID.U(regAddrWidth.W)) {
-                readPort.readData := roRegisters.marchid
-            }
+    io.readPort1.readData := 0.U
+    when(io.readPort1.readAddress.orR) {
+        when(io.readPort1.readAddress === ControlAndStatusRegisterFile.CSR_MSTATUS.U(regAddrWidth.W)) {
+            io.readPort1.readData := registers.mstatus
+        }.elsewhen(io.readPort1.readAddress === ControlAndStatusRegisterFile.CSR_MTVEC.U(regAddrWidth.W)) {
+            io.readPort1.readData := registers.mtvec
+        }.elsewhen(io.readPort1.readAddress === ControlAndStatusRegisterFile.CSR_MEPC.U(regAddrWidth.W)) {
+            io.readPort1.readData := registers.mepc
+        }.elsewhen(io.readPort1.readAddress === ControlAndStatusRegisterFile.CSR_MCAUSE.U(regAddrWidth.W)) {
+            io.readPort1.readData := registers.mcause
+        }.elsewhen(io.readPort1.readAddress === ControlAndStatusRegisterFile.CSR_MTVAL.U(regAddrWidth.W)) {
+            io.readPort1.readData := registers.mtval
+        }.elsewhen(io.readPort1.readAddress === ControlAndStatusRegisterFile.CSR_MVENDORID.U(regAddrWidth.W)) {
+            io.readPort1.readData := roRegisters.mvendorid
+        }.elsewhen(io.readPort1.readAddress === ControlAndStatusRegisterFile.CSR_MARCHID.U(regAddrWidth.W)) {
+            io.readPort1.readData := roRegisters.marchid
         }
-    })
+    }
+
+    io.readPort2.readData := registers.mepc
+    io.readPort3.readData := registers.mtvec
 
     Seq(io.writePort1, io.writePort2).foreach(writePort => {
         when(writePort.writeEnable && writePort.writeAddress.orR) {

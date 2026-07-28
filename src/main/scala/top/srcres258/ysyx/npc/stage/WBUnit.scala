@@ -70,6 +70,7 @@ class WBUnit(val xLen: Int) extends Module {
 
     val gprData = Wire(UInt(xLen.W))
     val csrData = Wire(UInt(xLen.W))
+    val zimm = Cat(0.U((xLen - 5).W), prevStageData.rs1)
 
     gprData := 0.U
     when(prevStageData.regWriteDataSel === ControlUnit.RD_MUX_DMEM.U(ControlUnit.RD_MUX_SEL_LEN.W)) {
@@ -81,7 +82,7 @@ class WBUnit(val xLen: Int) extends Module {
     }.elsewhen(prevStageData.regWriteDataSel === ControlUnit.RD_MUX_IMM.U(ControlUnit.RD_MUX_SEL_LEN.W)) {
         gprData := prevStageData.imm
     }.elsewhen(prevStageData.regWriteDataSel === ControlUnit.RD_MUX_PC_N.U(ControlUnit.RD_MUX_SEL_LEN.W)) {
-        gprData := prevStageData.pcNext
+        gprData := prevStageData.pcCur + 4.U(xLen.W)
     }.elsewhen(prevStageData.regWriteDataSel === ControlUnit.RD_MUX_CSR_DATA.U(ControlUnit.RD_MUX_SEL_LEN.W)) {
         gprData := prevStageData.csrData
     }
@@ -94,11 +95,11 @@ class WBUnit(val xLen: Int) extends Module {
     }.elsewhen(prevStageData.csrRegWriteDataSel === ControlUnit.CSR_RD_MUX_C.U) {
         csrData := prevStageData.csrData & (~prevStageData.rs1Data)
     }.elsewhen(prevStageData.csrRegWriteDataSel === ControlUnit.CSR_RD_MUX_W_IMM.U) {
-        csrData := prevStageData.zimm
+        csrData := zimm
     }.elsewhen(prevStageData.csrRegWriteDataSel === ControlUnit.CSR_RD_MUX_S_IMM.U) {
-        csrData := prevStageData.csrData | prevStageData.zimm
+        csrData := prevStageData.csrData | zimm
     }.elsewhen(prevStageData.csrRegWriteDataSel === ControlUnit.CSR_RD_MUX_C_IMM.U) {
-        csrData := prevStageData.csrData & (~prevStageData.zimm)
+        csrData := prevStageData.csrData & (~zimm)
     }
 
     io.gprWritePort.writeEnable := prevStageData.regWriteEnable
@@ -121,7 +122,7 @@ class WBUnit(val xLen: Int) extends Module {
 
         // 2. 再将原因写入 mcause 寄存器
         io.csrWritePort2.writeEnable := true.B
-        io.csrWritePort2.writeData := prevStageData.ecallCause
+        io.csrWritePort2.writeData := ControlUnit.MCAUSE_ECALL_FROM_M_MODE.U(xLen.W)
         io.csrWritePort2.writeAddress := ControlAndStatusRegisterFile.CSR_MCAUSE.U
     }
 
@@ -130,14 +131,15 @@ class WBUnit(val xLen: Int) extends Module {
     dpi.foreach { dpiBundle =>
         when(io.done) {
             dpiBundle.pc := prevStageData.pcCur
-            dpiBundle.pcNext := prevStageData.pcNext
+            dpiBundle.pcNext := prevStageData.pcCur + 4.U(xLen.W)
             dpiBundle.inst := prevStageData.inst
             dpiBundle.rs1 := prevStageData.rs1
             dpiBundle.rd := prevStageData.rd
             dpiBundle.imm := prevStageData.imm
             dpiBundle.rs1Data := prevStageData.rs1Data
-            dpiBundle.inst_jal := prevStageData.inst_jal
-            dpiBundle.inst_jalr := prevStageData.inst_jalr
+            dpiBundle.inst_jal := prevStageData.inst(6, 0) === "b1101111".U(7.W)
+            dpiBundle.inst_jalr := prevStageData.inst(6, 0) === "b1100111".U(7.W) &&
+                                   prevStageData.inst(14, 12) === 0.U(3.W)
         }.otherwise {
             dpiBundle.pc := 0.U
             dpiBundle.pcNext := 0.U
@@ -155,6 +157,13 @@ class WBUnit(val xLen: Int) extends Module {
 
     io.working := state =/= s_idle
 
-    io.gprWriteSuppressedX0 := prevStageData.regWriteEnable &&
-                                prevStageData.rd === 0.U
+    val gprWriteIntent = prevStageData.inst(6, 0) === "b0110011".U ||
+                         prevStageData.inst(6, 0) === "b1100111".U ||
+                         prevStageData.inst(6, 0) === "b0000011".U ||
+                         prevStageData.inst(6, 0) === "b0010011".U ||
+                         prevStageData.inst(6, 0) === "b0110111".U ||
+                         prevStageData.inst(6, 0) === "b0010111".U ||
+                         prevStageData.inst(6, 0) === "b1101111".U ||
+                         prevStageData.inst(6, 0) === "b1110011".U
+    io.gprWriteSuppressedX0 := gprWriteIntent && prevStageData.rd === 0.U
 }

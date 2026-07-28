@@ -87,7 +87,6 @@ class IDUnit(val xLen: Int) extends Module {
     val imm = Wire(UInt(xLen.W))
     val csr = Wire(UInt(12.W))
     val csrData = Wire(UInt(xLen.W))
-    val zimm = Wire(UInt(xLen.W))
     val epcData = Wire(UInt(xLen.W))
     val tvecData = Wire(UInt(xLen.W))
     
@@ -106,17 +105,18 @@ class IDUnit(val xLen: Int) extends Module {
 
     rs1 := prevStageData.inst(19, 15)
     rs2 := prevStageData.inst(24, 20)
+    val rs2Used = prevStageData.inst(6, 0) === "b0110011".U ||
+                  prevStageData.inst(6, 0) === "b1100011".U ||
+                  prevStageData.inst(6, 0) === "b0100011".U
     io.gprReadPort.readAddress1 := rs1
-    io.gprReadPort.readAddress2 := rs2
+    io.gprReadPort.readAddress2 := Mux(rs2Used, rs2, 0.U)
     rs1Data := io.gprReadPort.readData1
-    rs2Data := io.gprReadPort.readData2
+    rs2Data := Mux(rs2Used, io.gprReadPort.readData2, 0.U)
     rd := prevStageData.inst(11, 7)
 
     csr := prevStageData.inst(31, 20)
     io.csrReadPort1.readAddress := csr
     csrData := io.csrReadPort1.readData
-
-    zimm := rs1.asUInt.pad(xLen)
 
     io.csrReadPort2.readAddress := ControlAndStatusRegisterFile.CSR_MEPC.U
     epcData := io.csrReadPort2.readData
@@ -157,13 +157,10 @@ class IDUnit(val xLen: Int) extends Module {
     nextStageData.imm := imm
     nextStageData.rd := rd
     nextStageData.rs1 := rs1
-    nextStageData.rs2 := rs2
     nextStageData.csr := csr
     nextStageData.csrData := csrData
-    nextStageData.zimm := zimm
     nextStageData.epcData := epcData
     nextStageData.tvecData := tvecData
-    nextStageData.ecallCause := ControlUnit.MCAUSE_ECALL_FROM_M_MODE.U
     nextStageData.regWriteEnable := regWriteEnable
     nextStageData.csrRegWriteEnable := cu.io.csrRegWriteEnable
     nextStageData.aluPortASel := executePortASel
@@ -180,8 +177,6 @@ class IDUnit(val xLen: Int) extends Module {
     nextStageData.cuBranchEnable := cu.io.branchEnable
     nextStageData.epcRecoverEnable := cu.io.epcRecoverEnable
     nextStageData.ecallEnable := cu.io.ecallEnable
-    nextStageData.inst_jal := cu.io.inst_jal
-    nextStageData.inst_jalr := cu.io.inst_jalr
 
     dpi.foreach { dpiBundle =>
         when(state === s_wait_nextStage_ready) {
@@ -200,8 +195,6 @@ class IDUnit(val xLen: Int) extends Module {
     // All other RV32I opcodes (I-type variants, U-type, J-type, SYSTEM) do NOT
     // use rs2 as a register operand.
     val opcode = prevStageData.inst(6, 0)
-    io.rs2Unused := opcode =/= "b0110011".U(7.W) &&
-                    opcode =/= "b1100011".U(7.W) &&
-                    opcode =/= "b0100011".U(7.W)
+    io.rs2Unused := !rs2Used
     io.isSystemInst := opcode === "b1110011".U(7.W)
 }

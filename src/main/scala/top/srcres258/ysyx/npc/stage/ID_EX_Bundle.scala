@@ -23,13 +23,10 @@ class ID_EX_Bundle(xLen: Int) extends StageUnitBundle(xLen) {
     val imm = UInt(xLen.W)
     val rd = UInt(5.W)
     val rs1 = UInt(5.W)
-    val rs2 = UInt(5.W)
     val csr = UInt(12.W)
     val csrData = UInt(xLen.W)
-    val zimm = UInt(xLen.W)
     val epcData = UInt(xLen.W)
     val tvecData = UInt(xLen.W)
-    val ecallCause = UInt(xLen.W)
     // 控制信号组
     val regWriteEnable = Bool()
     val csrRegWriteEnable = Bool()
@@ -47,9 +44,6 @@ class ID_EX_Bundle(xLen: Int) extends StageUnitBundle(xLen) {
     val cuBranchEnable = Bool()
     val epcRecoverEnable = Bool()
     val ecallEnable = Bool()
-    // 调试信号 (仅供仿真使用)
-    val inst_jal = Bool()
-    val inst_jalr = Bool()
 }
 
 object ID_EX_Bundle {
@@ -62,13 +56,10 @@ object ID_EX_Bundle {
         bundle.imm := 0.U
         bundle.rd := 0.U
         bundle.rs1 := 0.U
-        bundle.rs2 := 0.U
         bundle.csr := 0.U
         bundle.csrData := 0.U
-        bundle.zimm := 0.U
         bundle.epcData := 0.U
         bundle.tvecData := 0.U
-        bundle.ecallCause := 0.U
         bundle.regWriteEnable := false.B
         bundle.csrRegWriteEnable := false.B
         bundle.aluPortASel := false.B
@@ -85,8 +76,6 @@ object ID_EX_Bundle {
         bundle.cuBranchEnable := false.B
         bundle.epcRecoverEnable := false.B
         bundle.ecallEnable := false.B
-        bundle.inst_jal := false.B
-        bundle.inst_jalr := false.B
     }
 
     def apply(xLen: Int): ID_EX_Bundle = {
