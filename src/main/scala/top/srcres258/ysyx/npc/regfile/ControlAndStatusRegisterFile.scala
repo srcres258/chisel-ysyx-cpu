@@ -23,10 +23,18 @@ class ControlAndStatusRegisterFile(
     Assertion.assertProcessorXLen(xLen)
 
     val io = IO(new Bundle {
+        // 读口 1：由 IDUnit 的 csrReadPort1 连接，用于读取“指令中显式给出的 CSR 地址”。
+        //       目标硬件模块是译码单元 (IDUnit)，它会把当前指令的 csr 字段直接送到这里。
         val readPort1 = new ControlAndStatusRegisterFile.ReadPort(xLen, regAddrWidth)
+        // 读口 2：由 IDUnit 的 csrReadPort2 连接，专门读取 mepc。
+        //       目标硬件模块是 IDUnit 中为异常返回/陷入恢复准备的固定 CSR 读通路。
         val readPort2 = new ControlAndStatusRegisterFile.ReadPort(xLen, regAddrWidth)
+        // 读口 3：由 IDUnit 的 csrReadPort3 连接，专门读取 mtvec。
+        //       目标硬件模块是 IDUnit 中为陷入入口地址计算准备的固定 CSR 读通路。
         val readPort3 = new ControlAndStatusRegisterFile.ReadPort(xLen, regAddrWidth)
+        // 写口 1：由 WBUnit 的 csrWritePort1 连接，承担普通 CSR 指令写回，以及 ecall 时的 mepc 写入。
         val writePort1 = new ControlAndStatusRegisterFile.WritePort(xLen, regAddrWidth)
+        // 写口 2：由 WBUnit 的 csrWritePort2 连接，仅用于 ecall 时把 mcause 写入 CSR 文件。
         val writePort2 = new ControlAndStatusRegisterFile.WritePort(xLen, regAddrWidth)
     })
 
@@ -35,6 +43,8 @@ class ControlAndStatusRegisterFile(
     val registers = RegInit(ControlAndStatusRegisterFile.RegisterBundle(xLen))
     val roRegisters = ControlAndStatusRegisterFile.ReadOnlyRegisterBundle(xLen)
 
+    // readPort1 需要按地址解码：它面对的是任意 CSR 编号，
+    // 所以先给默认值，再根据 readAddress 选择普通 CSR 或只读 CSR 的实际数据。
     io.readPort1.readData := 0.U
     when(io.readPort1.readAddress.orR) {
         when(io.readPort1.readAddress === ControlAndStatusRegisterFile.CSR_MSTATUS.U(regAddrWidth.W)) {
@@ -54,9 +64,14 @@ class ControlAndStatusRegisterFile(
         }
     }
 
+    // readPort2/readPort3 的地址在上层已经固定：IDUnit 会分别绑到 mepc / mtvec。
+    // 因此这里不再做地址分发，直接把对应 CSR 的当前值送出去即可。
     io.readPort2.readData := registers.mepc
     io.readPort3.readData := registers.mtvec
 
+    // writePort1/writePort2 都是“按地址写入”的通用 CSR 写口：
+    //   - writePort1：普通 CSR 指令写回，另外 ecall 进入陷入时会被复用去写 mepc
+    //   - writePort2：仅在 ecall 时写 mcause
     Seq(io.writePort1, io.writePort2).foreach(writePort => {
         when(writePort.writeEnable && writePort.writeAddress.orR) {
             when(writePort.writeAddress === ControlAndStatusRegisterFile.CSR_MSTATUS.U(regAddrWidth.W)) {
