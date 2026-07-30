@@ -102,11 +102,15 @@ class LoadAndStoreUnit(val xLen: Int) extends Module {
     val state = RegInit(s_idle)
 
     state := MuxLookup(state, s_idle)(List(
-        s_idle -> Mux(pendingReq,
-            Mux(pendingIsWrite,
+        s_idle -> Mux(
+            pendingReq,
+            Mux(
+                pendingIsWrite,
                 Mux(needsByteSplit, s_split_write_aw, s_write_aw),
-                Mux(needsByteSplit, s_split_read_ar, s_read_ar)),
-            s_idle),
+                Mux(needsByteSplit, s_split_read_ar, s_read_ar)
+            ),
+            s_idle
+        ),
         s_read_ar -> Mux(io.memBus.ar.fire, s_read_r, s_read_ar),
         s_read_r -> Mux(io.memBus.r.fire, s_resp, s_read_r),
         s_write_aw -> Mux(io.memBus.aw.fire, s_write_w, s_write_aw),
@@ -127,7 +131,8 @@ class LoadAndStoreUnit(val xLen: Int) extends Module {
         ),
         s_resp -> Mux(
             Mux(pendingIsFetch, io.ifetchResp.fire, io.memResp.fire),
-            s_idle, s_resp)
+            s_idle, s_resp
+        )
     ))
 
     // === AXI4 AR 通道 ===
@@ -138,9 +143,11 @@ class LoadAndStoreUnit(val xLen: Int) extends Module {
     io.memBus.ar.bits.size := Mux(
         state === s_split_read_ar,
         AXI4.sizeToAxSize(1).U,
-        Mux(pendingIsFetch,
+        Mux(
+            pendingIsFetch,
             AXI4.sizeToAxSize(xLen / 8).U,
-            calcAxSize(pendingLsType))
+            calcAxSize(pendingLsType)
+        )
     )
     io.memBus.ar.bits.burst := AXI4.BURST_FIXED.U
     when(io.memBus.ar.valid) {
