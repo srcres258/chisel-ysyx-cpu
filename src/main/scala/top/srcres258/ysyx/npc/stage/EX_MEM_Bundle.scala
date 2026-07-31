@@ -39,36 +39,11 @@ class EX_MEM_Bundle(xLen: Int) extends StageUnitBundle(xLen) {
 }
 
 object EX_MEM_Bundle {
-    def setDefaultValues(bundle: EX_MEM_Bundle): Unit = {
-        bundle.pcCur := 0.U
-        bundle.inst := 0.U
-        bundle.pcTarget := 0.U
-        bundle.aluOutput := 0.U
-        bundle.compBranchEnable := false.B
-        bundle.rs1Data := 0.U
-        bundle.storeData := 0.U
-        bundle.imm := 0.U
-        bundle.rd := 0.U
-        bundle.rs1 := 0.U
-        bundle.csr := 0.U
-        bundle.csrData := 0.U
-        bundle.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
-        bundle.memReadEnable := false.B
-        bundle.memWriteEnable := false.B
-        bundle.regWriteEnable := false.B
-        bundle.csrRegWriteEnable := false.B
-        bundle.regWriteDataSel := 0.U
-        bundle.csrRegWriteDataSel := 0.U
-        bundle.ecallEnable := false.B
-    }
-
     def apply(xLen: Int): EX_MEM_Bundle = {
         Assertion.assertProcessorXLen(xLen)
 
-        val default = Wire(new EX_MEM_Bundle(xLen))
-
-        setDefaultValues(default)
-        
+        val default = WireDefault(0.U.asTypeOf(new EX_MEM_Bundle(xLen)))
+        default.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
         default
     }
 }

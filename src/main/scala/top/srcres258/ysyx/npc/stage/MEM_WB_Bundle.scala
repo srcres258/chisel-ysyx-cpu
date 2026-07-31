@@ -34,33 +34,11 @@ class MEM_WB_Bundle(xLen: Int) extends StageUnitBundle(xLen) {
 }
 
 object MEM_WB_Bundle {
-    def setDefaultValues(bundle: MEM_WB_Bundle): Unit = {
-        bundle.pcCur := 0.U
-        bundle.inst := 0.U
-        bundle.pcTarget := Config.pcInitialVal.U
-        bundle.memReadData := 0.U
-        bundle.aluOutput := 0.U
-        bundle.compBranchEnable := false.B
-        bundle.rs1Data := 0.U
-        bundle.imm := 0.U
-        bundle.rd := 0.U
-        bundle.rs1 := 0.U
-        bundle.csr := 0.U
-        bundle.csrData := 0.U
-        bundle.regWriteEnable := false.B
-        bundle.csrRegWriteEnable := false.B
-        bundle.regWriteDataSel := 0.U
-        bundle.csrRegWriteDataSel := 0.U
-        bundle.ecallEnable := false.B
-    }
-
     def apply(xLen: Int): MEM_WB_Bundle = {
         Assertion.assertProcessorXLen(xLen)
 
-        val default = Wire(new MEM_WB_Bundle(xLen))
-
-        setDefaultValues(default)
-        
+        val default = WireDefault(0.U.asTypeOf(new MEM_WB_Bundle(xLen)))
+        default.pcTarget := Config.pcInitialVal.U
         default
     }
 }

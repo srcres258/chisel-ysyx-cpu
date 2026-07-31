@@ -117,15 +117,7 @@ object ControlAndStatusRegisterFile {
         def apply(xLen: Int): RegisterBundle = {
             Assertion.assertProcessorXLen(xLen)
 
-            val default = Wire(new RegisterBundle(xLen))
-
-            default.mstatus := 0.U
-            default.mtvec := 0.U
-            default.mepc := 0.U
-            default.mcause := 0.U
-            default.mtval := 0.U
-
-            default
+            WireDefault(0.U.asTypeOf(new RegisterBundle(xLen)))
         }
     }
 
@@ -143,7 +135,7 @@ object ControlAndStatusRegisterFile {
         def apply(xLen: Int): ReadOnlyRegisterBundle = {
             Assertion.assertProcessorXLen(xLen)
 
-            val default = Wire(new ReadOnlyRegisterBundle(xLen))
+            val default = WireDefault(0.U.asTypeOf(new ReadOnlyRegisterBundle(xLen)))
 
             /* read-only CSRs */
             // ysyx 规定: mvendorid 为 "ysyx" 的各个字符的 ASCII 码按大端序组合,

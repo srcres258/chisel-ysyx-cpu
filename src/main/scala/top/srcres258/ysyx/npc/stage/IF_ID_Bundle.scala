@@ -17,19 +17,9 @@ class IF_ID_Bundle(xLen: Int) extends StageUnitBundle(xLen) {
 }
 
 object IF_ID_Bundle {
-    private def setDefaultValues(bundle: IF_ID_Bundle): Unit = {
-        bundle.pcCur := 0.U
-        bundle.pcNext := 0.U
-        bundle.inst := 0.U
-    }
-
     def apply(xLen: Int): IF_ID_Bundle = {
         Assertion.assertProcessorXLen(xLen)
 
-        val default = Wire(new IF_ID_Bundle(xLen))
-
-        setDefaultValues(default)
-        
-        default
+        WireDefault(0.U.asTypeOf(new IF_ID_Bundle(xLen)))
     }
 }
