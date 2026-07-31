@@ -49,6 +49,26 @@ class LoadAndStoreUnit(val xLen: Int) extends Module {
     val pendingWriteData = RegInit(0.U(xLen.W))
     val pendingLsType = RegInit(0.U(LoadAndStoreUnit.LS_TYPE_LEN.W))
 
+    val reqArbiter = Module(new Arbiter(new LoadAndStoreUnit.RequestBundle(xLen), 2))
+    reqArbiter.io.in(0).valid := io.ifetchReq.valid
+    reqArbiter.io.in(0).bits.isFetch := true.B
+    reqArbiter.io.in(0).bits.addr := io.ifetchReq.bits.addr
+    reqArbiter.io.in(0).bits.writeData := 0.U
+    reqArbiter.io.in(0).bits.isWrite := false.B
+    reqArbiter.io.in(0).bits.lsType := LoadAndStoreUnit.LS_UNKNOWN.U
+
+    reqArbiter.io.in(1).valid := io.memReq.valid
+    reqArbiter.io.in(1).bits.isFetch := false.B
+    reqArbiter.io.in(1).bits.addr := io.memReq.bits.addr
+    reqArbiter.io.in(1).bits.writeData := io.memReq.bits.writeData
+    reqArbiter.io.in(1).bits.isWrite := io.memReq.bits.isWrite
+    reqArbiter.io.in(1).bits.lsType := io.memReq.bits.lsType
+
+    reqArbiter.io.out.ready := !pendingReq
+
+    io.ifetchReq.ready := reqArbiter.io.in(0).ready
+    io.memReq.ready := reqArbiter.io.in(1).ready
+
     val pendingByteOffset = pendingAddr(1, 0)
     val pendingByteShift = Cat(pendingByteOffset, 0.U(3.W))
     val alignedWriteData = pendingWriteData << pendingByteShift
@@ -71,31 +91,17 @@ class LoadAndStoreUnit(val xLen: Int) extends Module {
     val splitWriteData = splitWriteByte << splitByteShift
     val splitWriteStrobe = 1.U(dataStrobeLen.W) << splitByteOffset
 
-    // === 仲裁器状态: 在空闲时, IFU 取指优先 ===
-    val acceptFetch = Wire(Bool())
-    val acceptMem = Wire(Bool())
-    acceptFetch := !pendingReq && io.ifetchReq.valid
-    acceptMem := !pendingReq && !acceptFetch && io.memReq.valid
-
-    when(acceptFetch) {
+    // === 仲裁器状态: 采用标准库 Arbiter, 在空闲时对 IFU / MEMU 做固定优先级选择 ===
+    when(reqArbiter.io.out.fire) {
         pendingReq := true.B
-        pendingIsFetch := true.B
-        pendingIsWrite := false.B
-        pendingAddr := io.ifetchReq.bits.addr
-    }
-    when(acceptMem) {
-        pendingReq := true.B
-        pendingIsFetch := false.B
-        pendingIsWrite := io.memReq.bits.isWrite
-        pendingAddr := io.memReq.bits.addr
-        pendingWriteData := io.memReq.bits.writeData
-        pendingLsType := io.memReq.bits.lsType
+        pendingIsFetch := reqArbiter.io.out.bits.isFetch
+        pendingIsWrite := reqArbiter.io.out.bits.isWrite
+        pendingAddr := reqArbiter.io.out.bits.addr
+        pendingWriteData := reqArbiter.io.out.bits.writeData
+        pendingLsType := reqArbiter.io.out.bits.lsType
         splitByteIndex := 0.U
         splitReadData := 0.U
     }
-
-    io.ifetchReq.ready := acceptFetch
-    io.memReq.ready := acceptMem
 
     // === AXI4 读事务状态机 ===
     val s_idle :: s_read_ar :: s_read_r :: s_write_aw :: s_write_w :: s_write_b :: s_resp :: s_split_read_ar :: s_split_read_r :: s_split_write_aw :: s_split_write_w :: s_split_write_b :: Nil = Enum(12)
@@ -254,6 +260,14 @@ object LoadAndStoreUnit {
     val LS_S_H: Int = 6
     val LS_S_B: Int = 7
     val LS_UNKNOWN: Int = 1 << LS_TYPE_LEN - 1
+
+    class RequestBundle(val xLen: Int) extends Bundle {
+        val isFetch = Bool()
+        val addr = UInt(xLen.W)
+        val writeData = UInt(xLen.W)
+        val isWrite = Bool()
+        val lsType = UInt(LoadAndStoreUnit.LS_TYPE_LEN.W)
+    }
 
     /**
       * 取指请求: 只需地址.

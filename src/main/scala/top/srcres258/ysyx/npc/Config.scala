@@ -25,10 +25,4 @@ object Config {
     val pcInitialVal: BigInt = BigInt(0x30000000L)
 
     val randomDelayWidth: Int = 4
-
-    object Arbiter {
-        val arbiterMaxMasterAmount: Int = 4
-        val arbiterMasterIdxIfUnit: Int = 0
-        val arbiterMasterIdxMemUnit: Int = 1
-    }
 }
