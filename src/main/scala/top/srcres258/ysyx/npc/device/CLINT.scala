@@ -84,7 +84,8 @@ class CLINT(val xLen: Int) extends Module {
       写事务分支:  +-> 4 -> 5 -> 6 --+
      */
     val s_idle :: s_read_doAction :: s_read_wait_rready :: (
-        s_write_wait_wvalid :: s_write_doAction :: s_write_wait_bready :: Nil) = Enum(6)
+        s_write_wait_wvalid :: s_write_doAction :: s_write_wait_bready :: Nil
+    ) = Enum(6)
 
     val state = RegInit(s_idle)
     state := MuxLookup(state, s_idle)(List(

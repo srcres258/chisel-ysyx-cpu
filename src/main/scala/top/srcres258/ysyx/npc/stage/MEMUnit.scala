@@ -41,7 +41,8 @@ class MEMUnit(val xLen: Int) extends Module {
 
     val s_idle :: s_waitData :: s_sendLsuReq :: s_waitLsuResp :: (
         s_clint_load_wait_arready :: s_clint_load_wait_rvalid :: (
-        s_wait_nextStage_ready :: Nil)) = Enum(7)
+        s_wait_nextStage_ready :: Nil
+    )) = Enum(7)
 
     val state = RegInit(s_idle)
 

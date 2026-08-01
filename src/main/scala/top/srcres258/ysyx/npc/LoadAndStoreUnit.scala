@@ -104,7 +104,10 @@ class LoadAndStoreUnit(val xLen: Int) extends Module {
     }
 
     // === AXI4 读事务状态机 ===
-    val s_idle :: s_read_ar :: s_read_r :: s_write_aw :: s_write_w :: s_write_b :: s_resp :: s_split_read_ar :: s_split_read_r :: s_split_write_aw :: s_split_write_w :: s_split_write_b :: Nil = Enum(12)
+    val s_idle :: s_read_ar :: s_read_r :: s_write_aw :: s_write_w :: (
+        s_write_b :: s_resp :: s_split_read_ar :: s_split_read_r :: (
+        s_split_write_aw :: s_split_write_w :: s_split_write_b :: Nil
+    )) = Enum(12)
     val state = RegInit(s_idle)
 
     state := MuxLookup(state, s_idle)(List(
