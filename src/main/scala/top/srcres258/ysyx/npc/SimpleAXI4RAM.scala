@@ -14,6 +14,12 @@ class SimpleAXI4RAM(xLen: Int, depth: Int = 32768) extends Module {
     val rdataReg = RegInit(0.U(xLen.W))
     val rvalidReg = RegInit(false.B)
 
+    val awCaptured = RegInit(false.B)
+    val awAddrReg = RegInit(0.U(xLen.W))
+    val wCaptured = RegInit(false.B)
+    val wDataReg = RegInit(0.U(xLen.W))
+    val wStrbReg = RegInit(0.U((xLen / 8).W))
+
     io.axi.ar.ready := !rvalidReg
     io.axi.r.valid := rvalidReg
     io.axi.r.bits.data := rdataReg
@@ -21,14 +27,33 @@ class SimpleAXI4RAM(xLen: Int, depth: Int = 32768) extends Module {
     io.axi.r.bits.last := true.B
     io.axi.r.bits.id := 0.U
 
-    io.axi.aw.ready := true.B
-    io.axi.w.ready := true.B
     val bvalidReg = RegInit(false.B)
+    io.axi.aw.ready := !bvalidReg && !awCaptured
+    io.axi.w.ready := !bvalidReg && !wCaptured
     io.axi.b.valid := bvalidReg
     io.axi.b.bits.resp := 0.U
     io.axi.b.bits.id := 0.U
-    when(io.axi.aw.fire && io.axi.w.fire) {
+
+    when(io.axi.aw.fire) {
+        awCaptured := true.B
+        awAddrReg := io.axi.aw.bits.addr
+    }
+    when(io.axi.w.fire) {
+        wCaptured := true.B
+        wDataReg := io.axi.w.bits.data
+        wStrbReg := io.axi.w.bits.strb
+    }
+    when(awCaptured && wCaptured && !bvalidReg) {
+        val wordAddr = (awAddrReg >> 2.U)(log2Ceil(depth) - 1, 0)
+        val oldData = mem(wordAddr)
+        val b0 = Mux(wStrbReg(0), wDataReg(7, 0), oldData(7, 0))
+        val b1 = Mux(wStrbReg(1), wDataReg(15, 8), oldData(15, 8))
+        val b2 = Mux(wStrbReg(2), wDataReg(23, 16), oldData(23, 16))
+        val b3 = Mux(wStrbReg(3), wDataReg(31, 24), oldData(31, 24))
+        mem(wordAddr) := Cat(b3, b2, b1, b0)
         bvalidReg := true.B
+        awCaptured := false.B
+        wCaptured := false.B
     }.elsewhen(io.axi.b.fire) {
         bvalidReg := false.B
     }
