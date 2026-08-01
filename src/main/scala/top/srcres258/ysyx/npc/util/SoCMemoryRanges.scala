@@ -14,6 +14,6 @@ object SoCMemoryRanges {
         ("psram", MemoryRange.ofSize(0x80000000L, 0x400000L)),
         ("mrom", MemoryRange.ofSize(0x20000000L, 0x1000L)),
         ("sram", MemoryRange.ofSize(0x0f000000L, 0x2000L)),
-        ("sdram", MemoryRange.ofSize(0xa0000000L, 0x2000000L))
+        ("sdram", MemoryRange.ofSize(0xa0000000L, 0x8000000L))
     )
 }
