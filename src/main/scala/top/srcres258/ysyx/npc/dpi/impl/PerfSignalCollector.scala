@@ -181,6 +181,17 @@ class PerfSignalCollector(val xLen: Int) extends Module {
         /** WB 退休指令的比较器分支使能 (compBranchEnable, 来自 wbu.io.prevStage.bits) */
         val wb_comp_branch_enable = Input(Bool())
 
+        // ---- I-cache perf observation signals (from InstructionCache.perfObs) ----
+        val icache_request_fire    = Input(Bool())
+        val icache_hit             = Input(Bool())
+        val icache_miss            = Input(Bool())
+        val icache_bypass          = Input(Bool())
+        val icache_lower_req_fire  = Input(Bool())
+        val icache_lower_resp_fire = Input(Bool())
+        val icache_refill_fire     = Input(Bool())
+        val icache_response_fire   = Input(Bool())
+        val icache_response_blocked = Input(Bool())
+
         // ---- 输出 ----
         val perf = new PerfDPIBundle(xLen)
     })
@@ -673,4 +684,17 @@ class PerfSignalCollector(val xLen: Int) extends Module {
     io.perf.ex.concurrency_alu_only := RegNext(decAluOnly && io.wb_done, false.B)
     io.perf.ex.concurrency_pc_only  := RegNext(decPcOnly && io.wb_done, false.B)
     io.perf.ex.concurrency_both     := RegNext(decBoth && io.wb_done, false.B)
+
+    // ================================================================
+    // 14. I-cache 性能信号 (PerfICacheDPIBundle) — 直接透传
+    // ================================================================
+    io.perf.icache.request_fire     := io.icache_request_fire
+    io.perf.icache.hit              := io.icache_hit
+    io.perf.icache.miss             := io.icache_miss
+    io.perf.icache.bypass           := io.icache_bypass
+    io.perf.icache.lower_req_fire   := io.icache_lower_req_fire
+    io.perf.icache.lower_resp_fire  := io.icache_lower_resp_fire
+    io.perf.icache.refill_fire      := io.icache_refill_fire
+    io.perf.icache.response_fire    := io.icache_response_fire
+    io.perf.icache.response_blocked := io.icache_response_blocked
 }

@@ -374,6 +374,40 @@ class PerfExDPIBundle(xLen: Int) extends DPIBundle {
 }
 
 /**
+  * I-cache 性能子束: 独立 I-cache 的事件脉冲与状态观测.
+  *
+  * 对 IFU↔ICache 和 ICache↔LSU 两边的 Decoupled 事务进行观测,
+  * 不修改缓存数据通路. 所有信号方向均为 Output.
+  *
+  * 与 C++ counter 映射 (T5):
+  *   request_fire      → icache.request.count
+  *   hit               → icache.hit.count
+  *   miss              → icache.miss.count
+  *   bypass            → icache.bypass.count
+  *   lower_req_fire    → icache.lower_req.count
+  *   lower_resp_fire   → icache.lower_resp.count
+  *   refill_fire       → icache.refill.count
+  *   response_fire     → icache.response.count
+  *   response_blocked  → icache.response_blocked.cycle
+  */
+class PerfICacheDPIBundle(xLen: Int) extends DPIBundle {
+    Assertion.assertProcessorXLen(xLen)
+
+    // ---- Event pulses (one-cycle, edges detected at fire) ----
+    val request_fire    = Output(Bool())  // cpuReq.fire (in s_idle)
+    val hit             = Output(Bool())  // request_fire && tag match
+    val miss            = Output(Bool())  // request_fire && !tag match && cacheable
+    val bypass          = Output(Bool())  // request_fire && !cacheable
+    val lower_req_fire  = Output(Bool())  // lowerReq.fire (in s_send_mem_req)
+    val lower_resp_fire = Output(Bool())  // lowerResp.fire (in s_wait_mem_resp)
+    val refill_fire     = Output(Bool())  // cache line valid-bit set (in s_cpu_resp)
+    val response_fire   = Output(Bool())  // cpuResp.fire (in s_cpu_resp)
+
+    // ---- Cycle-level signals (level semantics) ----
+    val response_blocked = Output(Bool()) // cpuResp.valid && !cpuResp.ready
+}
+
+/**
   * 性能计数器 DPI 总束.
   *
   * 聚合所有性能语义子束, 作为 `GeneralDPIBundle` 的 `perf` 字段.
@@ -396,4 +430,5 @@ class PerfDPIBundle(xLen: Int) extends DPIBundle {
     val ifetch = new PerfIfetchDPIBundle(xLen)
     val lsu    = new PerfLsuDPIBundle(xLen)
     val ex     = new PerfExDPIBundle(xLen)
+    val icache = new PerfICacheDPIBundle(xLen)
 }

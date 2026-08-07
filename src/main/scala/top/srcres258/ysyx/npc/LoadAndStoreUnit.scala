@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 
 import top.srcres258.ysyx.npc.util.Assertion
+import top.srcres258.ysyx.npc.util.SoCMemoryRanges
 import top.srcres258.ysyx.npc.bus.AXI4
 
 /**
@@ -214,6 +215,8 @@ class LoadAndStoreUnit(val xLen: Int) extends Module {
 
     io.ifetchResp.valid := state === s_resp && pendingIsFetch
     io.ifetchResp.bits.data := rdata
+    io.ifetchResp.bits.resp := rresp
+    io.ifetchResp.bits.cacheable := SoCMemoryRanges.isInstCacheable(pendingAddr)
 
     io.memResp.valid := state === s_resp && !pendingIsFetch
     io.memResp.bits.readData := rdata
@@ -280,10 +283,14 @@ object LoadAndStoreUnit {
     }
 
     /**
-      * 取指响应: 返回指令数据.
+      * 取指响应: 返回指令数据, 并携带低层错误状态与缓存策略信息.
       */
     class IfetchResp(xLen: Int) extends Bundle {
         val data = UInt(xLen.W)
+        /** 低层 AXI4 总线返回的响应状态 (OKAY/EXOKAY/SLVERR/DECERR). */
+        val resp = UInt(AXI4.RESP_WIDTH.W)
+        /** 当前地址是否落于指令 Cache 可缓存区域. */
+        val cacheable = Bool()
     }
 
     /**

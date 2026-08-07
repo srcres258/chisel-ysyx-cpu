@@ -17,6 +17,7 @@ import top.srcres258.ysyx.npc.util.Assertion
 import top.srcres258.ysyx.npc.util.MemoryRange
 import top.srcres258.ysyx.npc.device.CLINT
 import top.srcres258.ysyx.npc.bus.AXI4
+import top.srcres258.ysyx.npc.cache.InstructionCache
 
 class NPCWithSoC(val xLen: Int) extends Module {
     override def desiredName: String = "ysyx_25070190"
@@ -56,8 +57,11 @@ class NPCWithSoC(val xLen: Int) extends Module {
         executing := true.B
     }
     ifu.io.executionInfo.valid := !reset.asBool && !executing
-    lsu.io.ifetchReq <> ifu.io.lsuIfetchReq
-    lsu.io.ifetchResp <> ifu.io.lsuIfetchResp
+    val icache = Module(new InstructionCache(xLen))
+    icache.io.cpuReq <> ifu.io.lsuIfetchReq
+    icache.io.cpuResp <> ifu.io.lsuIfetchResp
+    icache.io.lowerReq <> lsu.io.ifetchReq
+    icache.io.lowerResp <> lsu.io.ifetchResp
 
     val idu = Module(new IDUnit(xLen))
     DecoupledIOConnect(ifu.io.nextStage, idu.io.prevStage, DecoupledIOConnect.Pipeline)
@@ -182,6 +186,16 @@ class NPCWithSoC(val xLen: Int) extends Module {
         perfCollector.io.lsu_aw_ready         := lsu.io.memBus.aw.ready
         perfCollector.io.lsu_w_ready          := lsu.io.memBus.w.ready
         perfCollector.io.wb_comp_branch_enable := wbu.io.prevStage.bits.compBranchEnable
+        // I-cache perf observation — DPI-only, no hardware in synthesis path
+        perfCollector.io.icache_request_fire    := icache.perfObs.get.request_fire
+        perfCollector.io.icache_hit             := icache.perfObs.get.hit
+        perfCollector.io.icache_miss            := icache.perfObs.get.miss
+        perfCollector.io.icache_bypass          := icache.perfObs.get.bypass
+        perfCollector.io.icache_lower_req_fire  := icache.perfObs.get.lower_req_fire
+        perfCollector.io.icache_lower_resp_fire := icache.perfObs.get.lower_resp_fire
+        perfCollector.io.icache_refill_fire     := icache.perfObs.get.refill_fire
+        perfCollector.io.icache_response_fire   := icache.perfObs.get.response_fire
+        perfCollector.io.icache_response_blocked := icache.perfObs.get.response_blocked
         generalDPI.perf <> perfCollector.io.perf
 
         val dpi = Module(new GeneralDPIAdapter(xLen))
@@ -225,8 +239,11 @@ class NPCStandalone(val xLen: Int) extends Module {
         executing := true.B
     }
     ifu.io.executionInfo.valid := !reset.asBool && !executing
-    lsu.io.ifetchReq <> ifu.io.lsuIfetchReq
-    lsu.io.ifetchResp <> ifu.io.lsuIfetchResp
+    val icache = Module(new InstructionCache(xLen))
+    icache.io.cpuReq <> ifu.io.lsuIfetchReq
+    icache.io.cpuResp <> ifu.io.lsuIfetchResp
+    icache.io.lowerReq <> lsu.io.ifetchReq
+    icache.io.lowerResp <> lsu.io.ifetchResp
 
     val idu = Module(new IDUnit(xLen))
     DecoupledIOConnect(ifu.io.nextStage, idu.io.prevStage, DecoupledIOConnect.Pipeline)
@@ -347,6 +364,15 @@ class NPCStandalone(val xLen: Int) extends Module {
         perfCollector.io.lsu_aw_ready         := lsu.io.memBus.aw.ready
         perfCollector.io.lsu_w_ready          := lsu.io.memBus.w.ready
         perfCollector.io.wb_comp_branch_enable := wbu.io.prevStage.bits.compBranchEnable
+        perfCollector.io.icache_request_fire    := icache.perfObs.get.request_fire
+        perfCollector.io.icache_hit             := icache.perfObs.get.hit
+        perfCollector.io.icache_miss            := icache.perfObs.get.miss
+        perfCollector.io.icache_bypass          := icache.perfObs.get.bypass
+        perfCollector.io.icache_lower_req_fire  := icache.perfObs.get.lower_req_fire
+        perfCollector.io.icache_lower_resp_fire := icache.perfObs.get.lower_resp_fire
+        perfCollector.io.icache_refill_fire     := icache.perfObs.get.refill_fire
+        perfCollector.io.icache_response_fire   := icache.perfObs.get.response_fire
+        perfCollector.io.icache_response_blocked := icache.perfObs.get.response_blocked
         generalDPI.perf <> perfCollector.io.perf
 
         val dpi = Module(new GeneralDPIAdapter(xLen))
