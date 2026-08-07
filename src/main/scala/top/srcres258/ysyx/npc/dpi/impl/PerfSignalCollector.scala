@@ -182,14 +182,14 @@ class PerfSignalCollector(val xLen: Int) extends Module {
         val wb_comp_branch_enable = Input(Bool())
 
         // ---- I-cache perf observation signals (from InstructionCache.perfObs) ----
-        val icache_request_fire    = Input(Bool())
-        val icache_hit             = Input(Bool())
-        val icache_miss            = Input(Bool())
-        val icache_bypass          = Input(Bool())
-        val icache_lower_req_fire  = Input(Bool())
-        val icache_lower_resp_fire = Input(Bool())
-        val icache_refill_fire     = Input(Bool())
-        val icache_response_fire   = Input(Bool())
+        val icache_request_fire     = Input(Bool())
+        val icache_hit              = Input(Bool())
+        val icache_miss             = Input(Bool())
+        val icache_bypass           = Input(Bool())
+        val icache_lower_req_fire   = Input(Bool())
+        val icache_lower_resp_fire  = Input(Bool())
+        val icache_refill_fire      = Input(Bool())
+        val icache_response_fire    = Input(Bool())
         val icache_response_blocked = Input(Bool())
 
         // ---- 输出 ----

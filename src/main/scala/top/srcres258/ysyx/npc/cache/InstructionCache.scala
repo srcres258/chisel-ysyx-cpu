@@ -73,7 +73,7 @@ class InstructionCache(val xLen: Int) extends Module {
       reqAddr        := io.cpuReq.bits.addr
       reqIsCacheable := SoCMemoryRanges.isInstCacheable(io.cpuReq.bits.addr)
       reqIsHit       := curHit
-      state := Mux(curHit, s_cpu_resp, s_send_mem_req)
+      state          := Mux(curHit, s_cpu_resp, s_send_mem_req)
     }
   }
 
@@ -95,9 +95,9 @@ class InstructionCache(val xLen: Int) extends Module {
   }
 
   when (state === s_cpu_resp) {
-    io.cpuResp.valid         := true.B
-    io.cpuResp.bits.data     := Mux(reqIsHit, data(capIndex), lowerData)
-    io.cpuResp.bits.resp     := Mux(reqIsHit, RESP_OKAY, lowerResp)
+    io.cpuResp.valid          := true.B
+    io.cpuResp.bits.data      := Mux(reqIsHit, data(capIndex), lowerData)
+    io.cpuResp.bits.resp      := Mux(reqIsHit, RESP_OKAY, lowerResp)
     io.cpuResp.bits.cacheable := reqIsCacheable
     when (io.cpuResp.fire) {
       when (!reqIsHit && reqIsCacheable && lowerResp === RESP_OKAY) {
