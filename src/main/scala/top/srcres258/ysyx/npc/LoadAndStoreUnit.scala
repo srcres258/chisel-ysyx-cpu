@@ -34,9 +34,6 @@ class LoadAndStoreUnit(val xLen: Int) extends Module {
         // Perf 观测信号 — 只读, 不修改 LSU 行为
         val perfState       = Output(UInt(4.W))   // FSM state (12 states)
         val perfPendingFetch = Output(Bool())      // pendingIsFetch
-        val perfPendingWrite = Output(Bool())      // pendingIsWrite
-        val perfNeedsByteSplit = Output(Bool())    // needsByteSplit
-        val perfPendingLsType = Output(UInt(LoadAndStoreUnit.LS_TYPE_LEN.W)) // pendingLsType
     })
 
     // === 内部寄存器 ===
@@ -226,9 +223,6 @@ class LoadAndStoreUnit(val xLen: Int) extends Module {
 
     io.perfState       := state
     io.perfPendingFetch := pendingIsFetch
-    io.perfPendingWrite := pendingIsWrite
-    io.perfNeedsByteSplit := needsByteSplit
-    io.perfPendingLsType := pendingLsType
 
     // === 辅助函数: 计算 AXI4 axsize ===
     def calcAxSize(lsTypeIn: UInt): UInt = {

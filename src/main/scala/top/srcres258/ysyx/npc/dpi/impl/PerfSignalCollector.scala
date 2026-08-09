@@ -157,12 +157,6 @@ class PerfSignalCollector(val xLen: Int) extends Module {
         val lsu_state = Input(UInt(4.W))
         /** LSU pendingIsFetch (当前事务是否为取指) */
         val lsu_pending_fetch = Input(Bool())
-        /** LSU pendingIsWrite (当前事务是否为写) */
-        val lsu_pending_write = Input(Bool())
-        /** LSU needsByteSplit (当前字访问是否非对齐) */
-        val lsu_needs_byte_split = Input(Bool())
-        /** LSU pendingLsType (当前事务的 load/store 类型) */
-        val lsu_pending_ls_type = Input(UInt(LoadAndStoreUnit.LS_TYPE_LEN.W))
         /** LSU AXI AR 信道 .fire (valid && ready) */
         val lsu_axi_ar_fire = Input(Bool())
         /** LSU AXI AW 信道 .fire */

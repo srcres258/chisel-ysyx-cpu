@@ -176,9 +176,6 @@ class NPCWithSoC(val xLen: Int) extends Module {
         // LSU observation signals (from LoadAndStoreUnit)
         perfCollector.io.lsu_state            := lsu.io.perfState
         perfCollector.io.lsu_pending_fetch    := lsu.io.perfPendingFetch
-        perfCollector.io.lsu_pending_write    := lsu.io.perfPendingWrite
-        perfCollector.io.lsu_needs_byte_split := lsu.io.perfNeedsByteSplit
-        perfCollector.io.lsu_pending_ls_type  := lsu.io.perfPendingLsType
         perfCollector.io.lsu_axi_ar_fire      := lsu.io.memBus.ar.valid && lsu.io.memBus.ar.ready
         perfCollector.io.lsu_axi_aw_fire      := lsu.io.memBus.aw.valid && lsu.io.memBus.aw.ready
         perfCollector.io.lsu_axi_w_fire       := lsu.io.memBus.w.valid && lsu.io.memBus.w.ready
@@ -360,9 +357,6 @@ class NPCStandalone(val xLen: Int) extends Module {
         // LSU observation signals (from LoadAndStoreUnit)
         perfCollector.io.lsu_state            := lsu.io.perfState
         perfCollector.io.lsu_pending_fetch    := lsu.io.perfPendingFetch
-        perfCollector.io.lsu_pending_write    := lsu.io.perfPendingWrite
-        perfCollector.io.lsu_needs_byte_split := lsu.io.perfNeedsByteSplit
-        perfCollector.io.lsu_pending_ls_type  := lsu.io.perfPendingLsType
         perfCollector.io.lsu_axi_ar_fire      := lsu.io.memBus.ar.valid && lsu.io.memBus.ar.ready
         perfCollector.io.lsu_axi_aw_fire      := lsu.io.memBus.aw.valid && lsu.io.memBus.aw.ready
         perfCollector.io.lsu_axi_w_fire       := lsu.io.memBus.w.valid && lsu.io.memBus.w.ready
