@@ -70,6 +70,7 @@ class InstructionCache(val xLen: Int, val icacheConfig: ICacheConfig = ICacheCon
 
   private val capIndex = reqAddr(INDEX_WIDTH + OFFSET_WIDTH - 1, OFFSET_WIDTH)
   private val capTag   = reqAddr(xLen - 1, INDEX_WIDTH + OFFSET_WIDTH)
+  private val selectedLine  = data(capIndex)
 
   private val capWordOffset = Wire(UInt(WORD_IDX_WIDTH.W))
   if (WORDS_PER_LINE > 1) {
@@ -123,7 +124,11 @@ class InstructionCache(val xLen: Int, val icacheConfig: ICacheConfig = ICacheCon
         refillError := true.B
         state := s_cpu_resp
       }.otherwise {
-        data(capIndex)(refillWordIdx) := io.lowerResp.bits.data
+        val updatedLine = Wire(Vec(WORDS_PER_LINE, UInt(xLen.W)))
+        for (wordIdx <- 0 until WORDS_PER_LINE) {
+          updatedLine(wordIdx) := Mux(refillWordIdx === wordIdx.U, io.lowerResp.bits.data, selectedLine(wordIdx))
+        }
+        data(capIndex) := updatedLine
         when (refillWordIdx +& 1.U >= WORDS_PER_LINE.U) {
           state := s_cpu_resp
         }.otherwise {
@@ -136,8 +141,9 @@ class InstructionCache(val xLen: Int, val icacheConfig: ICacheConfig = ICacheCon
 
   when (state === s_cpu_resp) {
     val fromCache = reqIsHit || (reqIsCacheable && !refillError)
+    val selectedWord = Mux1H(UIntToOH(capWordOffset), selectedLine)
     io.cpuResp.valid          := true.B
-    io.cpuResp.bits.data      := Mux(fromCache, data(capIndex)(capWordOffset), lowerData)
+    io.cpuResp.bits.data      := Mux(fromCache, selectedWord, lowerData)
     io.cpuResp.bits.resp      := Mux(fromCache, RESP_OKAY, lowerResp)
     io.cpuResp.bits.cacheable := reqIsCacheable
     when (io.cpuResp.fire) {
