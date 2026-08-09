@@ -98,6 +98,7 @@ class PerfSignalCollector(val xLen: Int) extends Module {
         val mem_lsu_req_ready     = Input(Bool())
         val mem_lsu_req_isWrite   = Input(Bool())
         val mem_lsu_req_addr      = Input(UInt(xLen.W))
+        val mem_lsu_req_ls_type   = Input(UInt(LoadAndStoreUnit.LS_TYPE_LEN.W))
         val mem_lsu_resp_valid    = Input(Bool())
         val mem_lsu_resp_ready    = Input(Bool())
         /** CLINT 总线 AR 信道 .fire (clintBus.ar.valid && clintBus.ar.ready) */
@@ -532,33 +533,30 @@ class PerfSignalCollector(val xLen: Int) extends Module {
     val memReqIsLoad  = memReqFire && !io.mem_lsu_req_isWrite
     val memReqIsStore = memReqFire && io.mem_lsu_req_isWrite
 
-    // 从 LSU 内部观测 needsByteSplit 和 pendingLsType
-    // 注意: 在 acceptMem 的同一周期, pendingLsType 还未更新,
-    // 因此需要用 LSU 的 perfPendingLsType 在 memReqFire 下一拍获取
-    val lsuAcceptMem = RegNext(memReqFire && !io.lsu_pending_fetch, false.B)
-    val lsuNeedsByteSplit_d = RegNext(io.lsu_needs_byte_split, false.B)
-    val lsuPendingLsType_d  = RegNext(io.lsu_pending_ls_type, 0.U)
+    // 直接用本次 MEM→LSU 请求的字段分类，避免读 LSU 内部 pending 寄存器的陈旧值。
+    val reqLsType      = io.mem_lsu_req_ls_type
+    val reqByteOffset  = io.mem_lsu_req_addr(1, 0)
+    val reqIsWordLoad  = reqLsType === LoadAndStoreUnit.LS_L_W.U
+    val reqIsWordStore = reqLsType === LoadAndStoreUnit.LS_S_W.U
+    val reqNeedsSplit  = (reqIsWordLoad || reqIsWordStore) && reqByteOffset =/= 0.U
 
-    // Load 类型分类 (1-cycle delayed to align with LSU pending registers)
-    import LoadAndStoreUnit.{LS_L_B, LS_L_BU, LS_L_H, LS_L_HU, LS_L_W, LS_S_B, LS_S_H, LS_S_W}
-    val isByteLoad  = lsuPendingLsType_d === LS_L_B.U(4.W)  || lsuPendingLsType_d === LS_L_BU.U(4.W)
-    val isHalfLoad  = lsuPendingLsType_d === LS_L_H.U(4.W)  || lsuPendingLsType_d === LS_L_HU.U(4.W)
-    val isWordLoad  = lsuPendingLsType_d === LS_L_W.U(4.W)
-    val isByteStore = lsuPendingLsType_d === LS_S_B.U(4.W)
-    val isHalfStore = lsuPendingLsType_d === LS_S_H.U(4.W)
-    val isWordStore = lsuPendingLsType_d === LS_S_W.U(4.W)
-    val isAligned   = !lsuNeedsByteSplit_d
+    val isByteLoad  = reqLsType === LoadAndStoreUnit.LS_L_B.U  || reqLsType === LoadAndStoreUnit.LS_L_BU.U
+    val isHalfLoad  = reqLsType === LoadAndStoreUnit.LS_L_H.U  || reqLsType === LoadAndStoreUnit.LS_L_HU.U
+    val isWordLoad  = reqLsType === LoadAndStoreUnit.LS_L_W.U
+    val isByteStore = reqLsType === LoadAndStoreUnit.LS_S_B.U
+    val isHalfStore = reqLsType === LoadAndStoreUnit.LS_S_H.U
+    val isWordStore = reqLsType === LoadAndStoreUnit.LS_S_W.U
 
-    io.perf.lsu.load_byte_fire      := lsuAcceptMem && isByteLoad
-    io.perf.lsu.load_half_fire      := lsuAcceptMem && isHalfLoad
-    io.perf.lsu.load_word_fire      := lsuAcceptMem && isWordLoad
-    io.perf.lsu.load_aligned_fire   := lsuAcceptMem && !io.lsu_pending_write && isAligned
-    io.perf.lsu.load_unaligned_fire := lsuAcceptMem && !io.lsu_pending_write && !isAligned
-    io.perf.lsu.store_byte_fire     := lsuAcceptMem && isByteStore
-    io.perf.lsu.store_half_fire     := lsuAcceptMem && isHalfStore
-    io.perf.lsu.store_word_fire     := lsuAcceptMem && isWordStore
-    io.perf.lsu.store_aligned_fire  := lsuAcceptMem && io.lsu_pending_write && isAligned
-    io.perf.lsu.store_unaligned_fire:= lsuAcceptMem && io.lsu_pending_write && !isAligned
+    io.perf.lsu.load_byte_fire       := memReqIsLoad  && isByteLoad
+    io.perf.lsu.load_half_fire       := memReqIsLoad  && isHalfLoad
+    io.perf.lsu.load_word_fire       := memReqIsLoad  && isWordLoad
+    io.perf.lsu.load_aligned_fire    := memReqIsLoad  && !reqNeedsSplit
+    io.perf.lsu.load_unaligned_fire  := memReqIsLoad  && reqNeedsSplit
+    io.perf.lsu.store_byte_fire      := memReqIsStore && isByteStore
+    io.perf.lsu.store_half_fire      := memReqIsStore && isHalfStore
+    io.perf.lsu.store_word_fire      := memReqIsStore && isWordStore
+    io.perf.lsu.store_aligned_fire   := memReqIsStore && !reqNeedsSplit
+    io.perf.lsu.store_unaligned_fire := memReqIsStore && reqNeedsSplit
 
     // ---- LSU AXI 信道握手 (全部事务) ----
     io.perf.lsu.axi_ar_fire := io.lsu_axi_ar_fire

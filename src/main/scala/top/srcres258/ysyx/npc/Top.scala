@@ -144,6 +144,7 @@ class NPCWithSoC(val xLen: Int) extends Module {
         perfCollector.io.mem_lsu_req_ready     := memu.io.lsuMemReq.ready
         perfCollector.io.mem_lsu_req_isWrite   := memu.io.lsuMemReq.bits.isWrite
         perfCollector.io.mem_lsu_req_addr      := memu.io.lsuMemReq.bits.addr
+        perfCollector.io.mem_lsu_req_ls_type   := memu.io.lsuMemReq.bits.lsType
         perfCollector.io.mem_lsu_resp_valid    := memu.io.lsuMemResp.valid
         perfCollector.io.mem_lsu_resp_ready    := memu.io.lsuMemResp.ready
         perfCollector.io.mem_clint_ar_fire     := memu.io.clintBus.ar.valid && memu.io.clintBus.ar.ready
@@ -327,6 +328,7 @@ class NPCStandalone(val xLen: Int) extends Module {
         perfCollector.io.mem_lsu_req_ready     := memu.io.lsuMemReq.ready
         perfCollector.io.mem_lsu_req_isWrite   := memu.io.lsuMemReq.bits.isWrite
         perfCollector.io.mem_lsu_req_addr      := memu.io.lsuMemReq.bits.addr
+        perfCollector.io.mem_lsu_req_ls_type   := memu.io.lsuMemReq.bits.lsType
         perfCollector.io.mem_lsu_resp_valid    := memu.io.lsuMemResp.valid
         perfCollector.io.mem_lsu_resp_ready    := memu.io.lsuMemResp.ready
         perfCollector.io.mem_clint_ar_fire     := memu.io.clintBus.ar.valid && memu.io.clintBus.ar.ready
