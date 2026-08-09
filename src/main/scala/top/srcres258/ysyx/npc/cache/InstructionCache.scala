@@ -4,27 +4,39 @@ import chisel3._
 import chisel3.util._
 
 import top.srcres258.ysyx.npc.Config
+import top.srcres258.ysyx.npc.ICacheConfig
 import top.srcres258.ysyx.npc.LoadAndStoreUnit
 import top.srcres258.ysyx.npc.bus.AXI4
 import top.srcres258.ysyx.npc.util.SoCMemoryRanges
 
 class InstructionCachePerfObsBundle extends Bundle {
-    val request_fire    = Output(Bool())
-    val hit             = Output(Bool())
-    val miss            = Output(Bool())
-    val bypass          = Output(Bool())
-    val lower_req_fire  = Output(Bool())
-    val lower_resp_fire = Output(Bool())
-    val refill_fire     = Output(Bool())
-    val response_fire   = Output(Bool())
+    val request_fire     = Output(Bool())
+    val hit              = Output(Bool())
+    val miss             = Output(Bool())
+    val bypass           = Output(Bool())
+    val lower_req_fire   = Output(Bool())
+    val lower_resp_fire  = Output(Bool())
+    val refill_fire      = Output(Bool())
+    val response_fire    = Output(Bool())
     val response_blocked = Output(Bool())
+    // ── Line-size-aware counters (T4) ──
+    val refill_word_fire      = Output(Bool())  // per-word refill beat (lowerResp.fire during cacheable refill)
+    val refill_transaction_fire = Output(Bool()) // full-line refill completion (same event as refill_fire, separate counter)
+    val miss_wait_cycle       = Output(Bool())  // level: cache handling cacheable miss (s_send_mem_req | s_wait_mem_resp)
+    val bypass_wait_cycle     = Output(Bool())  // level: cache handling bypass (!reqIsCacheable, s_send_mem_req | s_wait_mem_resp)
+    val total_miss_time_cycle = Output(Bool())  // level: any non-hit response delay (state =/= s_idle && state =/= s_cpu_resp)
 }
 
-class InstructionCache(val xLen: Int) extends Module {
-  private val N_ENTRIES: Int = 16
+class InstructionCache(val xLen: Int, val icacheConfig: ICacheConfig = ICacheConfig()) extends Module {
+  private val N_ENTRIES: Int = icacheConfig.numEntries
+  private val BLOCK_BYTES: Int = icacheConfig.blockBytes
+  private val WORDS_PER_LINE: Int = BLOCK_BYTES / 4
+  private val OFFSET_WIDTH: Int = log2Ceil(BLOCK_BYTES)
   private val INDEX_WIDTH: Int = log2Ceil(N_ENTRIES)
-  private val OFFSET_WIDTH: Int = 2
   private val TAG_WIDTH: Int = xLen - INDEX_WIDTH - OFFSET_WIDTH
+
+  private val WORD_IDX_WIDTH: Int = if (WORDS_PER_LINE > 1) log2Ceil(WORDS_PER_LINE) else 1
+  private val REFILL_CNT_WIDTH: Int = if (WORDS_PER_LINE > 1) log2Ceil(WORDS_PER_LINE) else 1
 
   private val RESP_OKAY: UInt = 0.U(AXI4.RESP_WIDTH.W)
 
@@ -38,7 +50,7 @@ class InstructionCache(val xLen: Int) extends Module {
 
   private val valid = RegInit(VecInit(Seq.fill(N_ENTRIES)(false.B)))
   private val tag   = Reg(Vec(N_ENTRIES, UInt(TAG_WIDTH.W)))
-  private val data  = Reg(Vec(N_ENTRIES, UInt(xLen.W)))
+  private val data  = Reg(Vec(N_ENTRIES, Vec(WORDS_PER_LINE, UInt(xLen.W))))
 
   private val s_idle :: s_send_mem_req :: s_wait_mem_resp :: s_cpu_resp :: Nil = Enum(4)
   private val state = RegInit(s_idle)
@@ -49,12 +61,24 @@ class InstructionCache(val xLen: Int) extends Module {
   private val lowerData      = Reg(UInt(xLen.W))
   private val lowerResp      = Reg(UInt(AXI4.RESP_WIDTH.W))
 
+  private val refillWordIdx = RegInit(0.U(REFILL_CNT_WIDTH.W))
+  private val refillError   = RegInit(false.B)
+
   private val curOffset = io.cpuReq.bits.addr(OFFSET_WIDTH - 1, 0)
   private val curIndex  = io.cpuReq.bits.addr(INDEX_WIDTH + OFFSET_WIDTH - 1, OFFSET_WIDTH)
   private val curTag    = io.cpuReq.bits.addr(xLen - 1, INDEX_WIDTH + OFFSET_WIDTH)
 
   private val capIndex = reqAddr(INDEX_WIDTH + OFFSET_WIDTH - 1, OFFSET_WIDTH)
   private val capTag   = reqAddr(xLen - 1, INDEX_WIDTH + OFFSET_WIDTH)
+
+  private val capWordOffset = Wire(UInt(WORD_IDX_WIDTH.W))
+  if (WORDS_PER_LINE > 1) {
+    capWordOffset := reqAddr(OFFSET_WIDTH - 1, 2)
+  } else {
+    capWordOffset := 0.U
+  }
+
+  private val lineBase = reqAddr(xLen - 1, OFFSET_WIDTH) ## 0.U(OFFSET_WIDTH.W)
 
   private val curHit = valid(curIndex) && tag(curIndex) === curTag
 
@@ -73,13 +97,15 @@ class InstructionCache(val xLen: Int) extends Module {
       reqAddr        := io.cpuReq.bits.addr
       reqIsCacheable := SoCMemoryRanges.isInstCacheable(io.cpuReq.bits.addr)
       reqIsHit       := curHit
+      refillWordIdx  := 0.U
+      refillError    := false.B
       state          := Mux(curHit, s_cpu_resp, s_send_mem_req)
     }
   }
 
   when (state === s_send_mem_req) {
     io.lowerReq.valid    := true.B
-    io.lowerReq.bits.addr := reqAddr
+    io.lowerReq.bits.addr := Mux(reqIsCacheable, lineBase + (refillWordIdx << 2), reqAddr)
     when (io.lowerReq.fire) {
       state := s_wait_mem_resp
     }
@@ -90,27 +116,41 @@ class InstructionCache(val xLen: Int) extends Module {
     when (io.lowerResp.fire) {
       lowerData := io.lowerResp.bits.data
       lowerResp := io.lowerResp.bits.resp
-      state := s_cpu_resp
+
+      when (!reqIsCacheable) {
+        state := s_cpu_resp
+      }.elsewhen (io.lowerResp.bits.resp =/= RESP_OKAY) {
+        refillError := true.B
+        state := s_cpu_resp
+      }.otherwise {
+        data(capIndex)(refillWordIdx) := io.lowerResp.bits.data
+        when (refillWordIdx +& 1.U >= WORDS_PER_LINE.U) {
+          state := s_cpu_resp
+        }.otherwise {
+          refillWordIdx := refillWordIdx + 1.U
+          state := s_send_mem_req
+        }
+      }
     }
   }
 
   when (state === s_cpu_resp) {
+    val fromCache = reqIsHit || (reqIsCacheable && !refillError)
     io.cpuResp.valid          := true.B
-    io.cpuResp.bits.data      := Mux(reqIsHit, data(capIndex), lowerData)
-    io.cpuResp.bits.resp      := Mux(reqIsHit, RESP_OKAY, lowerResp)
+    io.cpuResp.bits.data      := Mux(fromCache, data(capIndex)(capWordOffset), lowerData)
+    io.cpuResp.bits.resp      := Mux(fromCache, RESP_OKAY, lowerResp)
     io.cpuResp.bits.cacheable := reqIsCacheable
     when (io.cpuResp.fire) {
-      when (!reqIsHit && reqIsCacheable && lowerResp === RESP_OKAY) {
+      when (!reqIsHit && reqIsCacheable && !refillError) {
         valid(capIndex) := true.B
         tag(capIndex)   := capTag
-        data(capIndex)  := lowerData
       }
       state := s_idle
     }
   }
 
   assert(
-    !(state === s_idle && io.cpuReq.fire) || curOffset === 0.U,
+    !(state === s_idle && io.cpuReq.fire) || io.cpuReq.bits.addr(1, 0) === 0.U,
     "[ICache] CPU request address not 4B-aligned"
   )
 
@@ -134,12 +174,16 @@ class InstructionCache(val xLen: Int) extends Module {
     "[ICache] Duplicate lower memory request"
   )
 
-  // ---- Perf observation — DPI-only, no hardware in synthesis path ----
+  assert(
+    !(state === s_wait_mem_resp && refillError),
+    "[ICache] Refill error detected but state not yet at cpuResp"
+  )
+
+  // Perf observation, DPI-only, no hardware in synthesis path
   if (Config.enableDPI) {
     val obs = perfObs.get
     val isCacheable = SoCMemoryRanges.isInstCacheable(io.cpuReq.bits.addr)
 
-    // Event pulses
     obs.request_fire := (state === s_idle) && io.cpuReq.fire
     obs.hit          := obs.request_fire && curHit
     obs.miss         := obs.request_fire && !curHit && isCacheable
@@ -149,11 +193,25 @@ class InstructionCache(val xLen: Int) extends Module {
     obs.lower_resp_fire := (state === s_wait_mem_resp) && io.lowerResp.fire
 
     obs.refill_fire := (state === s_cpu_resp) && io.cpuResp.fire &&
-      !reqIsHit && reqIsCacheable && lowerResp === RESP_OKAY
+      !reqIsHit && reqIsCacheable && !refillError
 
     obs.response_fire := (state === s_cpu_resp) && io.cpuResp.fire
 
     obs.response_blocked := (state === s_cpu_resp) &&
       io.cpuResp.valid && !io.cpuResp.ready
+
+    obs.refill_word_fire := (state === s_wait_mem_resp) && io.lowerResp.fire &&
+      reqIsCacheable
+
+    obs.refill_transaction_fire := (state === s_cpu_resp) && io.cpuResp.fire &&
+      !reqIsHit && reqIsCacheable && !refillError
+
+    obs.miss_wait_cycle := reqIsCacheable &&
+      (state === s_send_mem_req || state === s_wait_mem_resp)
+
+    obs.bypass_wait_cycle := !reqIsCacheable &&
+      (state === s_send_mem_req || state === s_wait_mem_resp)
+
+    obs.total_miss_time_cycle := state =/= s_idle && state =/= s_cpu_resp
   }
 }

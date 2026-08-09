@@ -1,5 +1,14 @@
 package top.srcres258.ysyx.npc
 
+case class ICacheConfig(blockBytes: Int = 4, numEntries: Int = 16) {
+    require(blockBytes > 0 && (blockBytes & (blockBytes - 1)) == 0,
+        s"ICacheConfig.blockBytes must be a positive power of 2, got $blockBytes")
+    require(blockBytes >= 4,
+        s"ICacheConfig.blockBytes must be at least 4 (xLen byte width), got $blockBytes")
+    require(numEntries > 0 && (numEntries & (numEntries - 1)) == 0,
+        s"ICacheConfig.numEntries must be a positive power of 2, got $numEntries")
+}
+
 object Config {
     sealed trait IntegrationMode
     case object Standalone extends IntegrationMode
@@ -7,6 +16,7 @@ object Config {
 
     var integrationMode: IntegrationMode = YsyxSoCIntegrated
     var enableDPI: Boolean = true
+    var icacheConfig: ICacheConfig = ICacheConfig()
 
     val xlen: Int = 32
 

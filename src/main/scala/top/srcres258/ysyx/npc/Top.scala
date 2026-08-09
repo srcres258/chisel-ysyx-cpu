@@ -57,7 +57,7 @@ class NPCWithSoC(val xLen: Int) extends Module {
         executing := true.B
     }
     ifu.io.executionInfo.valid := !reset.asBool && !executing
-    val icache = Module(new InstructionCache(xLen))
+    val icache = Module(new InstructionCache(xLen, Config.icacheConfig))
     icache.io.cpuReq <> ifu.io.lsuIfetchReq
     icache.io.cpuResp <> ifu.io.lsuIfetchResp
     icache.io.lowerReq <> lsu.io.ifetchReq
@@ -185,17 +185,22 @@ class NPCWithSoC(val xLen: Int) extends Module {
         perfCollector.io.lsu_axi_b_fire       := lsu.io.memBus.b.valid && lsu.io.memBus.b.ready
         perfCollector.io.lsu_aw_ready         := lsu.io.memBus.aw.ready
         perfCollector.io.lsu_w_ready          := lsu.io.memBus.w.ready
-        perfCollector.io.wb_comp_branch_enable := wbu.io.prevStage.bits.compBranchEnable
+        perfCollector.io.wb_comp_branch_enable   := wbu.io.prevStage.bits.compBranchEnable
         // I-cache perf observation — DPI-only, no hardware in synthesis path
-        perfCollector.io.icache_request_fire    := icache.perfObs.get.request_fire
-        perfCollector.io.icache_hit             := icache.perfObs.get.hit
-        perfCollector.io.icache_miss            := icache.perfObs.get.miss
-        perfCollector.io.icache_bypass          := icache.perfObs.get.bypass
-        perfCollector.io.icache_lower_req_fire  := icache.perfObs.get.lower_req_fire
-        perfCollector.io.icache_lower_resp_fire := icache.perfObs.get.lower_resp_fire
-        perfCollector.io.icache_refill_fire     := icache.perfObs.get.refill_fire
-        perfCollector.io.icache_response_fire   := icache.perfObs.get.response_fire
+        perfCollector.io.icache_request_fire     := icache.perfObs.get.request_fire
+        perfCollector.io.icache_hit              := icache.perfObs.get.hit
+        perfCollector.io.icache_miss             := icache.perfObs.get.miss
+        perfCollector.io.icache_bypass           := icache.perfObs.get.bypass
+        perfCollector.io.icache_lower_req_fire   := icache.perfObs.get.lower_req_fire
+        perfCollector.io.icache_lower_resp_fire  := icache.perfObs.get.lower_resp_fire
+        perfCollector.io.icache_refill_fire      := icache.perfObs.get.refill_fire
+        perfCollector.io.icache_response_fire    := icache.perfObs.get.response_fire
         perfCollector.io.icache_response_blocked := icache.perfObs.get.response_blocked
+        perfCollector.io.icache_refill_word_fire        := icache.perfObs.get.refill_word_fire
+        perfCollector.io.icache_refill_transaction_fire := icache.perfObs.get.refill_transaction_fire
+        perfCollector.io.icache_miss_wait_cycle         := icache.perfObs.get.miss_wait_cycle
+        perfCollector.io.icache_bypass_wait_cycle       := icache.perfObs.get.bypass_wait_cycle
+        perfCollector.io.icache_total_miss_time_cycle   := icache.perfObs.get.total_miss_time_cycle
         generalDPI.perf <> perfCollector.io.perf
 
         val dpi = Module(new GeneralDPIAdapter(xLen))
@@ -239,7 +244,7 @@ class NPCStandalone(val xLen: Int) extends Module {
         executing := true.B
     }
     ifu.io.executionInfo.valid := !reset.asBool && !executing
-    val icache = Module(new InstructionCache(xLen))
+    val icache = Module(new InstructionCache(xLen, Config.icacheConfig))
     icache.io.cpuReq <> ifu.io.lsuIfetchReq
     icache.io.cpuResp <> ifu.io.lsuIfetchResp
     icache.io.lowerReq <> lsu.io.ifetchReq
@@ -373,6 +378,11 @@ class NPCStandalone(val xLen: Int) extends Module {
         perfCollector.io.icache_refill_fire     := icache.perfObs.get.refill_fire
         perfCollector.io.icache_response_fire   := icache.perfObs.get.response_fire
         perfCollector.io.icache_response_blocked := icache.perfObs.get.response_blocked
+        perfCollector.io.icache_refill_word_fire        := icache.perfObs.get.refill_word_fire
+        perfCollector.io.icache_refill_transaction_fire := icache.perfObs.get.refill_transaction_fire
+        perfCollector.io.icache_miss_wait_cycle         := icache.perfObs.get.miss_wait_cycle
+        perfCollector.io.icache_bypass_wait_cycle       := icache.perfObs.get.bypass_wait_cycle
+        perfCollector.io.icache_total_miss_time_cycle   := icache.perfObs.get.total_miss_time_cycle
         generalDPI.perf <> perfCollector.io.perf
 
         val dpi = Module(new GeneralDPIAdapter(xLen))
@@ -498,11 +508,22 @@ object Top extends App {
     }
     Config.enableDPI = !disableDPI
 
+    val icacheBlockBytes = args.collectFirst {
+      case s if s.startsWith("icacheBlockBytes=") => s.drop("icacheBlockBytes=".length).toInt
+    }.getOrElse(ICacheConfig().blockBytes)
+    val icacheNumEntries = args.collectFirst {
+      case s if s.startsWith("icacheNumEntries=") => s.drop("icacheNumEntries=".length).toInt
+    }.getOrElse(ICacheConfig().numEntries)
+    val icacheConfig = ICacheConfig(icacheBlockBytes, icacheNumEntries)
+    Config.icacheConfig = icacheConfig
+
     val cs = new ChiselStage
     val modeStr = if (isStandalone) "Standalone" else "YsyxSoC"
     println(s"Emitting SystemVerilog for ProcessorCore (mode: $modeStr) with arguments:")
     println(s"  enableRandomDelay: $enableRandomDelay")
     println(s"  enableDPI: ${Config.enableDPI}")
+    println(s"  icacheBlockBytes: $icacheBlockBytes")
+    println(s"  icacheNumEntries: $icacheNumEntries")
     cs.execute(
         Array(
             "--target", "systemverilog",

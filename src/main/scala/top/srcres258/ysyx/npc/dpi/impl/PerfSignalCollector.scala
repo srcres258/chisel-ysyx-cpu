@@ -191,6 +191,12 @@ class PerfSignalCollector(val xLen: Int) extends Module {
         val icache_refill_fire      = Input(Bool())
         val icache_response_fire    = Input(Bool())
         val icache_response_blocked = Input(Bool())
+        // Line-size-aware (T4)
+        val icache_refill_word_fire        = Input(Bool())
+        val icache_refill_transaction_fire = Input(Bool())
+        val icache_miss_wait_cycle         = Input(Bool())
+        val icache_bypass_wait_cycle       = Input(Bool())
+        val icache_total_miss_time_cycle   = Input(Bool())
 
         // ---- 输出 ----
         val perf = new PerfDPIBundle(xLen)
@@ -697,4 +703,9 @@ class PerfSignalCollector(val xLen: Int) extends Module {
     io.perf.icache.refill_fire      := io.icache_refill_fire
     io.perf.icache.response_fire    := io.icache_response_fire
     io.perf.icache.response_blocked := io.icache_response_blocked
+    io.perf.icache.refill_word_fire        := io.icache_refill_word_fire
+    io.perf.icache.refill_transaction_fire := io.icache_refill_transaction_fire
+    io.perf.icache.miss_wait_cycle         := io.icache_miss_wait_cycle
+    io.perf.icache.bypass_wait_cycle       := io.icache_bypass_wait_cycle
+    io.perf.icache.total_miss_time_cycle   := io.icache_total_miss_time_cycle
 }

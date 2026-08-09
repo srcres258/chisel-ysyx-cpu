@@ -405,6 +405,13 @@ class PerfICacheDPIBundle(xLen: Int) extends DPIBundle {
 
     // ---- Cycle-level signals (level semantics) ----
     val response_blocked = Output(Bool()) // cpuResp.valid && !cpuResp.ready
+
+    // ---- Line-size-aware counters (T4, indices 118+) ----
+    val refill_word_fire        = Output(Bool()) // per-word refill beat
+    val refill_transaction_fire = Output(Bool()) // full-line refill completion
+    val miss_wait_cycle         = Output(Bool()) // level: cache handling cacheable miss
+    val bypass_wait_cycle       = Output(Bool()) // level: cache handling bypass
+    val total_miss_time_cycle   = Output(Bool()) // level: any non-hit response delay
 }
 
 /**
