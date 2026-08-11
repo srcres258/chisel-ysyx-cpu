@@ -1,6 +1,6 @@
 package top.srcres258.ysyx.npc
 
-case class ICacheConfig(blockBytes: Int = 4, numEntries: Int = 16) {
+case class ICacheConfig(blockBytes: Int = 4, numEntries: Int = 8) {
     require(blockBytes > 0 && (blockBytes & (blockBytes - 1)) == 0,
         s"ICacheConfig.blockBytes must be a positive power of 2, got $blockBytes")
     require(blockBytes >= 4,
