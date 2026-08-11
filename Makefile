@@ -1,7 +1,7 @@
 # Thin Makefile wrapper for Chisel build via Mill
 # Allows npc/Makefile to invoke via: $(MAKE) -C vsrc-chisel mill-run
 
-MILL := ./mill -i ChiselYSYXCpu.run
+MILL ?= mill -i ChiselYSYXCpu.run
 MILL_ARGS ?=
 
 mill-run:
