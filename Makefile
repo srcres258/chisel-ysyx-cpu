@@ -2,6 +2,7 @@
 # Allows npc/Makefile to invoke via: $(MAKE) -C vsrc-chisel mill-run
 
 MILL ?= mill -i ChiselYSYXCpu.run
+MILL_TEST ?= mill -i ChiselYSYXCpu.test
 MILL_ARGS ?=
 
 mill-run:
@@ -10,8 +11,11 @@ mill-run:
 mill-run-standalone:
 	$(MILL) standalone $(MILL_ARGS)
 
+test:
+	$(MILL_TEST)
+
 clean:
 	rm -rf generated
 
 .DEFAULT_GOAL := mill-run
-.PHONY: mill-run mill-run-standalone clean
+.PHONY: mill-run mill-run-standalone test clean
