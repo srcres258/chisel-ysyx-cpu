@@ -4,6 +4,7 @@ import org.scalatest.funspec.AnyFunSpec
 import chisel3.simulator.scalatest.ChiselSim
 
 import top.srcres258.ysyx.npc.cache.InstructionCache
+import top.srcres258.ysyx.npc.util.SoCMemoryRanges
 
 class InstructionCacheSpec extends AnyFunSpec with ChiselSim {
 
@@ -11,6 +12,7 @@ class InstructionCacheSpec extends AnyFunSpec with ChiselSim {
     private val CACHEABLE_SDRAM  = 0xA0000000L
     private val CACHEABLE_FLASH  = 0x30000000L
     private val NONCACHEABLE_UART = 0x10000000L
+    private val NONCACHEABLE_SRAM = 0x0F000000L
 
     private val RESP_OKAY: Int  = 0
     private val RESP_SLVERR: Int = 2
@@ -34,6 +36,20 @@ class InstructionCacheSpec extends AnyFunSpec with ChiselSim {
         dut.clock.step(1)
     }
 
+    private def issueRequestExpectClass(
+        dut: InstructionCache,
+        addr: Long,
+        hit: Boolean,
+        miss: Boolean,
+        bypass: Boolean
+    ): Unit = {
+        dut.io.cpuReq.valid.poke(true)
+        dut.io.cpuReq.bits.addr.poke(addr)
+        dut.io.cpuReq.ready.expect(true)
+        expectPerfClass(dut, request = true, hit = hit, miss = miss, bypass = bypass)
+        dut.clock.step(1)
+    }
+
     private def respondLower(
         dut: InstructionCache, data: Long, resp: Int, cacheable: Boolean
     ): Unit = {
@@ -48,6 +64,26 @@ class InstructionCacheSpec extends AnyFunSpec with ChiselSim {
     private def acceptCpuResp(dut: InstructionCache): Unit = {
         dut.io.cpuResp.ready.poke(true)
         dut.clock.step(1)
+    }
+
+    private def expectPerfClass(
+        dut: InstructionCache,
+        request: Boolean,
+        hit: Boolean,
+        miss: Boolean,
+        bypass: Boolean
+    ): Unit = {
+        if (Config.enableDPI) {
+            val obs = dut.perfObs.get
+            obs.request_fire.expect(request)
+            obs.hit.expect(hit)
+            obs.miss.expect(miss)
+            obs.bypass.expect(bypass)
+        }
+    }
+
+    private def expectPerfIdle(dut: InstructionCache): Unit = {
+        expectPerfClass(dut, request = false, hit = false, miss = false, bypass = false)
     }
 
     describe("InstructionCache") {
@@ -1191,6 +1227,127 @@ class InstructionCacheSpec extends AnyFunSpec with ChiselSim {
                     dut.io.cpuResp.bits.data.expect(0xEE000000L)
 
                     acceptCpuResp(dut)
+                }
+            }
+        }
+
+        describe("Cacheability-first classification") {
+            it("non-cacheable request sharing an index with a cached line still bypasses") {
+                simulate(new InstructionCache(32, ICacheConfig(blockBytes = 4, numEntries = 8))) { dut =>
+                    dut.clock.step(1)
+                    dut.io.lowerReq.ready.poke(true)
+
+                    val cacheableA = CACHEABLE_PSRAM
+                    val sameIndexNonCacheable = NONCACHEABLE_SRAM
+
+                    issueRequestExpectClass(dut, cacheableA, hit = false, miss = true, bypass = false)
+                    dut.io.lowerReq.valid.expect(true)
+                    dut.io.lowerReq.bits.addr.expect(cacheableA)
+                    respondLower(dut, 0x12345678L, RESP_OKAY, cacheable = true)
+                    expectPerfIdle(dut)
+
+                    dut.io.cpuResp.valid.expect(true)
+                    dut.io.cpuResp.bits.data.expect(0x12345678L)
+                    dut.io.cpuResp.bits.cacheable.expect(true)
+                    acceptCpuResp(dut)
+
+                    issueRequestExpectClass(dut, sameIndexNonCacheable, hit = false, miss = false, bypass = true)
+                    dut.io.lowerReq.valid.expect(true)
+                    dut.io.lowerReq.bits.addr.expect(sameIndexNonCacheable)
+                    respondLower(dut, 0x87654321L, RESP_OKAY, cacheable = false)
+                    expectPerfIdle(dut)
+
+                    dut.io.cpuResp.valid.expect(true)
+                    dut.io.cpuResp.bits.data.expect(0x87654321L)
+                    dut.io.cpuResp.bits.cacheable.expect(false)
+                    acceptCpuResp(dut)
+
+                    issueRequestExpectClass(dut, cacheableA, hit = true, miss = false, bypass = false)
+                    dut.io.cpuResp.valid.expect(true)
+                    dut.io.cpuResp.bits.data.expect(0x12345678L)
+                    dut.io.lowerReq.valid.expect(false)
+                }
+            }
+
+            it("repeated non-cacheable requests stay bypass and never allocate") {
+                simulate(new InstructionCache(32, ICacheConfig(blockBytes = 4, numEntries = 8))) { dut =>
+                    dut.clock.step(1)
+                    dut.io.lowerReq.ready.poke(true)
+
+                    issueRequestExpectClass(dut, NONCACHEABLE_UART, hit = false, miss = false, bypass = true)
+                    dut.io.lowerReq.valid.expect(true)
+                    dut.io.lowerReq.bits.addr.expect(NONCACHEABLE_UART)
+                    respondLower(dut, 0x11112222L, RESP_OKAY, cacheable = false)
+                    dut.io.cpuResp.valid.expect(true)
+                    dut.io.cpuResp.bits.cacheable.expect(false)
+                    acceptCpuResp(dut)
+
+                    issueRequestExpectClass(dut, NONCACHEABLE_UART, hit = false, miss = false, bypass = true)
+                    dut.io.lowerReq.valid.expect(true)
+                    dut.io.lowerReq.bits.addr.expect(NONCACHEABLE_UART)
+                    respondLower(dut, 0x33334444L, RESP_OKAY, cacheable = false)
+                    dut.io.cpuResp.valid.expect(true)
+                    dut.io.cpuResp.bits.data.expect(0x33334444L)
+                    dut.io.cpuResp.bits.cacheable.expect(false)
+                }
+            }
+
+            it("cacheable hit bypass hit sequence preserves the cached line") {
+                simulate(new InstructionCache(32, ICacheConfig(blockBytes = 4, numEntries = 8))) { dut =>
+                    dut.clock.step(1)
+                    dut.io.lowerReq.ready.poke(true)
+
+                    issueRequestExpectClass(dut, CACHEABLE_FLASH, hit = false, miss = true, bypass = false)
+                    dut.io.lowerReq.valid.expect(true)
+                    respondLower(dut, 0xAAAABBBBL, RESP_OKAY, cacheable = true)
+                    dut.io.cpuResp.valid.expect(true)
+                    acceptCpuResp(dut)
+
+                    issueRequestExpectClass(dut, CACHEABLE_FLASH, hit = true, miss = false, bypass = false)
+                    dut.io.cpuResp.valid.expect(true)
+                    dut.io.cpuResp.bits.data.expect(0xAAAABBBBL)
+                    dut.io.lowerReq.valid.expect(false)
+                    acceptCpuResp(dut)
+
+                    issueRequestExpectClass(dut, NONCACHEABLE_UART, hit = false, miss = false, bypass = true)
+                    dut.io.lowerReq.valid.expect(true)
+                    dut.io.lowerReq.bits.addr.expect(NONCACHEABLE_UART)
+                    respondLower(dut, 0xCCCCDDDDL, RESP_OKAY, cacheable = false)
+                    dut.io.cpuResp.valid.expect(true)
+                    dut.io.cpuResp.bits.cacheable.expect(false)
+                    acceptCpuResp(dut)
+
+                    issueRequestExpectClass(dut, CACHEABLE_FLASH, hit = true, miss = false, bypass = false)
+                    dut.io.cpuResp.valid.expect(true)
+                    dut.io.cpuResp.bits.data.expect(0xAAAABBBBL)
+                    dut.io.lowerReq.valid.expect(false)
+                }
+            }
+
+            it("instruction-cacheable region boundaries match SoCMemoryRanges") {
+                simulate(new InstructionCache(32, ICacheConfig(blockBytes = 4, numEntries = 8))) { dut =>
+                    dut.clock.step(1)
+                    dut.io.lowerReq.ready.poke(true)
+
+                    val boundaryCases = Seq(
+                        (SoCMemoryRanges.INST_CACHEABLE_REGIONS(0).end.toLong - 3L, true, 0x3000AAAAL),
+                        (SoCMemoryRanges.INST_CACHEABLE_REGIONS(0).end.toLong + 1L, false, 0x3000BBBBL),
+                        (SoCMemoryRanges.INST_CACHEABLE_REGIONS(1).end.toLong - 3L, true, 0x8000CCCCL),
+                        (SoCMemoryRanges.INST_CACHEABLE_REGIONS(1).end.toLong + 1L, false, 0x8000DDDDL),
+                        (SoCMemoryRanges.INST_CACHEABLE_REGIONS(2).end.toLong - 3L, true, 0xA000EEEEL),
+                        (SoCMemoryRanges.INST_CACHEABLE_REGIONS(2).end.toLong + 1L, false, 0xA000FFFFL)
+                    )
+
+                    boundaryCases.foreach { case (addr, cacheable, data) =>
+                        issueRequestExpectClass(dut, addr, hit = false, miss = cacheable, bypass = !cacheable)
+                        dut.io.lowerReq.valid.expect(true)
+                        dut.io.lowerReq.bits.addr.expect(addr)
+                        respondLower(dut, data, RESP_OKAY, cacheable = cacheable)
+                        dut.io.cpuResp.valid.expect(true)
+                        dut.io.cpuResp.bits.data.expect(data)
+                        dut.io.cpuResp.bits.cacheable.expect(cacheable)
+                        acceptCpuResp(dut)
+                    }
                 }
             }
         }

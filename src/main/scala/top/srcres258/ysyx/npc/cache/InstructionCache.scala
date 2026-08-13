@@ -81,7 +81,14 @@ class InstructionCache(val xLen: Int, val icacheConfig: ICacheConfig = ICacheCon
 
     private val lineBase = reqAddr(xLen - 1, OFFSET_WIDTH) ## 0.U(OFFSET_WIDTH.W)
 
-    private val curHit = valid(curIndex) && tag(curIndex) === curTag
+    // Only instruction-cacheable addresses participate in tag-lookup semantics.
+    // All other fetches bypass the I-cache and may never be classified as hit or miss.
+    private val requestFire  = (state === s_idle) && io.cpuReq.fire
+    private val curCacheable = SoCMemoryRanges.isInstCacheable(io.cpuReq.bits.addr)
+    private val curTagHit    = valid(curIndex) && tag(curIndex) === curTag
+    private val curHit       = curCacheable && curTagHit
+    private val curMiss      = curCacheable && !curTagHit
+    private val curBypass    = !curCacheable
 
     io.cpuReq.ready      := false.B
     io.cpuResp.valid     := false.B
@@ -96,11 +103,17 @@ class InstructionCache(val xLen: Int, val icacheConfig: ICacheConfig = ICacheCon
         io.cpuReq.ready := true.B
         when (io.cpuReq.fire) {
             reqAddr        := io.cpuReq.bits.addr
-            reqIsCacheable := SoCMemoryRanges.isInstCacheable(io.cpuReq.bits.addr)
+            reqIsCacheable := curCacheable
             reqIsHit       := curHit
             refillWordIdx  := 0.U
             refillError    := false.B
-            state          := Mux(curHit, s_cpu_resp, s_send_mem_req)
+            when (curBypass) {
+                state := s_send_mem_req
+            }.elsewhen (curHit) {
+                state := s_cpu_resp
+            }.otherwise {
+                state := s_send_mem_req
+            }
         }
     }
 
@@ -185,15 +198,32 @@ class InstructionCache(val xLen: Int, val icacheConfig: ICacheConfig = ICacheCon
         "[ICache] Refill error detected but state not yet at cpuResp"
     )
 
+    when (requestFire) {
+        assert(
+            PopCount(Seq(curHit, curMiss, curBypass)) === 1.U,
+            "[ICache] Request classification must be one-hot across hit/miss/bypass"
+        )
+        when (curCacheable) {
+            assert(
+                !curBypass && (curHit ^ curMiss),
+                "[ICache] Cacheable request must classify as exactly one of hit or miss"
+            )
+        }.otherwise {
+            assert(
+                !curHit && !curMiss && curBypass,
+                "[ICache] Non-cacheable request must classify as bypass only"
+            )
+        }
+    }
+
     // Perf observation, DPI-only, no hardware in synthesis path
     if (Config.enableDPI) {
         val obs = perfObs.get
-        val isCacheable = SoCMemoryRanges.isInstCacheable(io.cpuReq.bits.addr)
 
-        obs.request_fire := (state === s_idle) && io.cpuReq.fire
-        obs.hit          := obs.request_fire && curHit
-        obs.miss         := obs.request_fire && !curHit && isCacheable
-        obs.bypass       := obs.request_fire && !curHit && !isCacheable
+        obs.request_fire := requestFire
+        obs.hit          := requestFire && curHit
+        obs.miss         := requestFire && curMiss
+        obs.bypass       := requestFire && curBypass
 
         obs.lower_req_fire  := (state === s_send_mem_req) && io.lowerReq.fire
         obs.lower_resp_fire := (state === s_wait_mem_resp) && io.lowerResp.fire
